@@ -30,5 +30,15 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "tests", "target", "vault-trust", "migrations"]
+  "exclude": [
+    "node_modules",
+    "tests",
+    "tests/**/*",
+    "target",
+    "target/**/*",
+    "programs",
+    "programs/**/*",
+    "migrations",
+    "migrations/**/*"
+  ]
 }

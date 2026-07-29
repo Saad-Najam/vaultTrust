@@ -45,7 +45,7 @@ function loadServiceKeypair(): Keypair {
     );
   }
 
-  const resolvedPath = path.isAbsolute(keypairPath) ? keypairPath : path.join(process.cwd(), keypairPath);
+  const resolvedPath = path.isAbsolute(keypairPath) ? keypairPath : path.join(/*turbopackIgnore: true*/ process.cwd(), keypairPath);
 
   let raw: unknown;
   try {
