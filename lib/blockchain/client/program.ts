@@ -1,10 +1,35 @@
 import fs from "fs";
 import path from "path";
 import * as anchor from "@coral-xyz/anchor";
-import { Connection, Keypair } from "@solana/web3.js";
+import { Connection, Keypair, Transaction, VersionedTransaction } from "@solana/web3.js";
 import idl from "../idl/vault_trust.json";
 import type { VaultTrust } from "../idl/vault_trust";
 import { BlockchainError } from "../utils/errors";
+
+// Local stand-in for @coral-xyz/anchor's `Wallet` class: Turbopack's static
+// export analysis fails to see `Wallet` in that package's ESM re-export
+// chain (even though Node's own runtime resolves it fine), so we implement
+// the same minimal interface directly rather than depend on that import.
+class ServiceWallet implements anchor.Wallet {
+  constructor(readonly payer: Keypair) {}
+
+  async signTransaction<T extends Transaction | VersionedTransaction>(tx: T): Promise<T> {
+    if ("version" in tx) {
+      tx.sign([this.payer]);
+    } else {
+      tx.partialSign(this.payer);
+    }
+    return tx;
+  }
+
+  async signAllTransactions<T extends Transaction | VersionedTransaction>(txs: T[]): Promise<T[]> {
+    return Promise.all(txs.map((tx) => this.signTransaction(tx)));
+  }
+
+  get publicKey() {
+    return this.payer.publicKey;
+  }
+}
 
 let cachedProgram: anchor.Program<VaultTrust> | null = null;
 let cachedServiceKeypair: Keypair | null = null;
@@ -61,7 +86,7 @@ export function getVaultTrustProgram(): anchor.Program<VaultTrust> {
   // confirmation polling can run before giving up — without this it can hang
   // well past our own withTimeout() wrapper on some RPC providers.
   const connection = new Connection(rpcUrl, { commitment: "confirmed", confirmTransactionInitialTimeout: 20_000 });
-  const wallet = new anchor.Wallet(loadServiceKeypair());
+  const wallet = new ServiceWallet(loadServiceKeypair());
   const provider = new anchor.AnchorProvider(connection, wallet, { commitment: "confirmed" });
 
   cachedProgram = new anchor.Program<VaultTrust>(idl as anchor.Idl, provider);

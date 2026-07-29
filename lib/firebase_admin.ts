@@ -1,14 +1,12 @@
-import * as adminImport from "firebase-admin";
+import { initializeApp, getApps, cert, App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-
-const admin = adminImport as any;
 
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
 
-let adminApp: any = null;
+let adminApp: App | null = null;
 
 export function getFirebaseAdmin() {
   const missingServerVars: string[] = [];
@@ -30,10 +28,11 @@ export function getFirebaseAdmin() {
     );
   }
 
-  if (admin.apps.length === 0) {
+  const existingApps = getApps();
+  if (existingApps.length === 0) {
     try {
-      adminApp = admin.initializeApp({
-        credential: admin.credential.cert({
+      adminApp = initializeApp({
+        credential: cert({
           projectId,
           clientEmail,
           privateKey,
@@ -43,7 +42,7 @@ export function getFirebaseAdmin() {
       throw new Error(`Failed to initialize Firebase Admin SDK: ${error.message || error}`);
     }
   } else {
-    adminApp = admin.apps[0];
+    adminApp = existingApps[0];
   }
   return adminApp;
 }

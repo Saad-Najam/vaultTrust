@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { computeIncomeScore } from "@/lib/scoring";
+import { generateScoreExplanation, generateImprovementPlan, ExplanationLanguage } from "@/lib/explain";
 
 export async function GET(request: Request) {
   try {
@@ -31,6 +32,16 @@ export async function GET(request: Request) {
 
     // Compute IVS using scoring engine
     const scores = computeIncomeScore(activeTransactions);
+
+    // Optional narration layer — purely additive, never alters `scores` above.
+    // Run in parallel: each call has its own timeout/fallback, so there's no
+    // reason to make the second one wait on the first.
+    const { searchParams } = new URL(request.url);
+    const language: ExplanationLanguage = searchParams.get("lang") === "roman-urdu" ? "roman-urdu" : "en";
+    const [explanation, improvementPlan] = await Promise.all([
+      generateScoreExplanation(scores, language),
+      generateImprovementPlan(scores, language),
+    ]);
 
     // Save score record to DB
     const scoreRecord = {
@@ -74,6 +85,13 @@ export async function GET(request: Request) {
         trendScore: Math.round(trendScoreRaw),
         diversityScore: Math.round(diversityScoreRaw),
       },
+      explanation,
+      ...(improvementPlan
+        ? {
+            improvementSuggestions: improvementPlan.suggestions,
+            improvementDisclaimer: improvementPlan.disclaimer,
+          }
+        : {}),
     });
   } catch (error: any) {
     console.error("Profile reliability API endpoint error:", error);

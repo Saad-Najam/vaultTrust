@@ -109,15 +109,14 @@ async function handleRevocation(request: Request) {
       }
     }
 
+    // Refetch rather than spreading the pre-fetched `consent` object — that
+    // object predates the blockchain attempt above, so echoing it back would
+    // leak a stale blockchainError/blockchainStatus from a previous request.
+    const freshConsent = await dbService.getConsent(consent.id);
+
     return NextResponse.json({
       success: true,
-      consent: {
-        ...consent,
-        status: "REVOKED",
-        revokedAt,
-        blockchainStatus: blockchain.status,
-        solanaTxSignature: blockchain.signature,
-      },
+      consent: freshConsent,
       ledgerEntry,
       blockchain,
       message: "Consent successfully revoked and recorded in ledger.",

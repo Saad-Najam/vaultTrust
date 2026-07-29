@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import FreelancerSidebar from "@/components/FreelancerSidebar";
 
 export default function Page() {
   const router = useRouter();
@@ -298,36 +299,8 @@ export default function Page() {
               </div>
             </div>
             <div className="hidden lg:block">
-              {/*  Sidebar Navigation (Identity Lock: Consent Center Active)  */}
-              <aside className="h-screen w-64 fixed left-0 top-0 bg-surface dark:bg-inverse-surface shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col py-stack-lg z-50">
-              <div className="px-6 mb-10">
-              <Link href="/dashboard" className="text-headline-md font-headline-md font-extrabold text-primary dark:text-inverse-primary">VaultTrust</Link>
-              <p className="text-label-md font-label-md text-on-surface-variant">Freelancer Portal</p>
-              </div>
-              <nav className="flex-grow space-y-1">
-              <Link className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container transition-colors" href="/dashboard">
-              <span className="material-symbols-outlined mr-3">dashboard</span>
-              <span className="text-label-md font-label-md">Overview</span>
-              </Link>
-              <Link className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container transition-colors" href="/connect">
-              <span className="material-symbols-outlined mr-3">account_balance</span>
-              <span className="text-label-md font-label-md">Connected Accounts</span>
-              </Link>
-              {/*  Active State  */}
-              <Link className="flex items-center px-6 py-3 text-primary dark:text-inverse-primary font-bold border-r-4 border-primary dark:border-inverse-primary bg-primary-container/10 transition-all duration-200" href="/consent/setup">
-              <span className="material-symbols-outlined mr-3" style={{"fontVariationSettings":"'FILL' 1"}}>verified_user</span>
-              <span className="text-label-md font-label-md">Consent Center</span>
-              </Link>
-              <Link className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container transition-colors" href="/profile">
-              <span className="material-symbols-outlined mr-3">payments</span>
-              <span className="text-label-md font-label-md">Income Profile</span>
-              </Link>
-              <Link className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container transition-colors" href="/audit">
-              <span className="material-symbols-outlined mr-3">receipt_long</span>
-              <span className="text-label-md font-label-md">Activity &amp; Audit Trail</span>
-              </Link>
-              </nav>
-              </aside>
+              {/*  Sidebar Navigation  */}
+              <FreelancerSidebar />
               {/*  Top App Bar  */}
               <header className="flex justify-between items-center w-full px-margin-desktop h-16 ml-64 max-w-[calc(100%-16rem)] bg-surface-container-lowest dark:bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] fixed top-0 z-40">
               <div className="flex items-center gap-2">

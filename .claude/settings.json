@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude plugin *)",
+      "Bash(node --env-file=.env run-seed-temp.mts)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/_dev/seed -H \"Content-Type: application/json\")"
+    ]
+  }
+}

@@ -5,9 +5,19 @@ import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 
+// First 6 + last 4 characters, per the standard Explorer-link truncation format.
+function truncateSignature(sig: string | null | undefined): string {
+  if (!sig) return "";
+  if (sig.length <= 12) return sig;
+  return `${sig.slice(0, 6)}...${sig.slice(-4)}`;
+}
+
+function explorerTxUrl(sig: string): string {
+  return `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
+}
+
 export default function Page() {
   const [activeConsent, setActiveConsent] = useState<any>(null);
-  const [consentActive, setConsentActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [verification, setVerification] = useState<any>(null);
   const [revokeError, setRevokeError] = useState<string | null>(null);
@@ -19,7 +29,6 @@ export default function Page() {
         const data = await res.json();
         if (data.success && data.consent) {
           setActiveConsent(data.consent);
-          setConsentActive(true);
 
           try {
             const verifyRes = await fetchWithAuth(`/api/v1/consent/${data.consent.id}/verify`);
@@ -28,8 +37,6 @@ export default function Page() {
           } catch (verifyErr) {
             console.error("Verification check failed:", verifyErr);
           }
-        } else {
-          setConsentActive(false);
         }
       } catch (err) {
         console.error(err);
@@ -93,11 +100,23 @@ export default function Page() {
       });
       const data = await res.json();
       if (data.success) {
-        // The ledger revoke is guaranteed regardless of blockchain status —
-        // access is already cut off, so this is a genuine success either way.
-        setConsentActive(false);
-        setActiveConsent(null);
+        // Keep showing the (now revoked) consent record — the ledger revoke
+        // is guaranteed regardless of blockchain status, so this is a genuine
+        // success either way, and the revocation time/status should stay visible
+        // rather than the whole card disappearing.
+        setActiveConsent(data.consent);
         closeModal();
+
+        if (data.consent?.id) {
+          try {
+            const verifyRes = await fetchWithAuth(`/api/v1/consent/${data.consent.id}/verify`);
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) setVerification(verifyData);
+          } catch (verifyErr) {
+            console.error("Verification refresh failed:", verifyErr);
+          }
+        }
+
         if (typeof document !== 'undefined') {
           const toast = document.getElementById('successToast');
           if (toast) {
@@ -155,7 +174,7 @@ export default function Page() {
       {/*  Bento Grid Layout  */}
       <div className="grid grid-cols-12 gap-gutter">
       {/*  Main Consent Card (UBL Digital Lending)  */}
-      {consentActive && activeConsent ? (
+      {activeConsent ? (
         <div className="col-span-12 lg:col-span-8 bg-surface-container-lowest rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] p-8 border border-outline-variant/20 relative overflow-hidden">
         {/*  Glassmorphic Accent  */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-secondary/5 rounded-full blur-3xl -mr-32 -mt-32"></div>
@@ -172,35 +191,47 @@ export default function Page() {
         <span className="material-symbols-outlined text-[18px] text-tertiary">verified</span>
         </div>
         <div className="flex items-center gap-3 mt-1 flex-wrap">
-        <span className="px-3 py-1 bg-[#E8F5E9] text-[#004A3B] rounded-full text-[12px] font-bold">Active</span>
+        {activeConsent.status === "REVOKED" ? (
+          <span className="px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full text-[12px] font-bold">Revoked</span>
+        ) : (
+          <span className="px-3 py-1 bg-[#E8F5E9] text-[#004A3B] rounded-full text-[12px] font-bold">Active</span>
+        )}
+        {/* Verification Badge — driven entirely by the real /verify response, never hardcoded. */}
         {verification?.status === "VERIFIED" && (
           <span className="flex items-center gap-1 px-3 py-1 bg-primary/10 text-primary rounded-full text-[12px] font-bold border border-primary/20">
             <span className="material-symbols-outlined text-[14px]" style={{"fontVariationSettings":"'FILL' 1"}}>verified</span>
-            Blockchain-Confirmed
+            Verified
           </span>
         )}
         {verification?.status === "BLOCKCHAIN_PENDING" && (
           <span className="flex items-center gap-1 px-3 py-1 bg-secondary/10 text-secondary rounded-full text-[12px] font-bold border border-secondary/20">
             <span className="material-symbols-outlined text-[14px]">schedule</span>
-            Simulated (Blockchain Pending)
+            Blockchain-Pending
           </span>
         )}
         {verification?.status === "TAMPERED" && (
           <span className="flex items-center gap-1 px-3 py-1 bg-error/10 text-error rounded-full text-[12px] font-bold border border-error/20">
             <span className="material-symbols-outlined text-[14px]" style={{"fontVariationSettings":"'FILL' 1"}}>warning</span>
-            Tamper Detected
+            Tampered
           </span>
         )}
         <span className="text-label-sm font-label-sm text-on-surface-variant">
           Granted: {activeConsent.grantedAt ? new Date(activeConsent.grantedAt).toLocaleString() : "Unknown"}
         </span>
+        {activeConsent.revokedAt && (
+          <span className="text-label-sm font-label-sm text-on-surface-variant">
+            Revoked: {new Date(activeConsent.revokedAt).toLocaleString()}
+          </span>
+        )}
         </div>
         </div>
         </div>
-        <button className="mt-4 md:mt-0 px-6 py-3 border-2 border-error text-error rounded-xl font-bold text-label-md hover:bg-error/5 transition-all flex items-center gap-2" onClick={() => { openModal() }}>
-        <span className="material-symbols-outlined text-[20px]">no_accounts</span>
-                                    Revoke access
-                                </button>
+        {activeConsent.status !== "REVOKED" && (
+          <button className="mt-4 md:mt-0 px-6 py-3 border-2 border-error text-error rounded-xl font-bold text-label-md hover:bg-error/5 transition-all flex items-center gap-2" onClick={() => { openModal() }}>
+          <span className="material-symbols-outlined text-[20px]">no_accounts</span>
+                                      Revoke access
+                                  </button>
+        )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative z-10">
         <div className="space-y-2">
@@ -230,17 +261,19 @@ export default function Page() {
         <span className="material-symbols-outlined text-secondary" style={{"fontVariationSettings":"'FILL' 1"}}>info</span>
         <p className="text-body-sm text-on-surface-variant">This consent is protected by <strong>End-to-End Institutional Encryption</strong>. Data retrieval is limited to read-only access for the specified purpose.</p>
         </div>
-        {verification?.transactionSignature && (
+        {verification?.transactionSignature ? (
           <div className="mt-4 p-4 bg-surface rounded-lg border border-outline-variant/30 flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3 min-w-0">
               <span className="material-symbols-outlined text-primary" style={{"fontVariationSettings":"'FILL' 1"}}>link</span>
               <div className="min-w-0">
                 <p className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">Solana Transaction Signature</p>
-                <p className="text-body-sm font-mono text-on-surface truncate">{verification.transactionSignature}</p>
+                <p className="text-body-sm font-mono text-on-surface" title={verification.transactionSignature}>
+                  {truncateSignature(verification.transactionSignature)}
+                </p>
               </div>
             </div>
             <a
-              href={`https://explorer.solana.com/tx/${verification.transactionSignature}?cluster=devnet`}
+              href={explorerTxUrl(verification.transactionSignature)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 px-4 py-2 border border-primary text-primary rounded-lg text-label-sm font-bold hover:bg-primary/5 transition-all whitespace-nowrap"
@@ -248,6 +281,19 @@ export default function Page() {
               View on Explorer
               <span className="material-symbols-outlined text-[16px]">open_in_new</span>
             </a>
+          </div>
+        ) : (activeConsent.blockchainStatus === "FAILED" || activeConsent.blockchainStatus === "PENDING_RETRY") && (
+          // Expected fallback behavior, not an error — the ledger write already
+          // succeeded and guarantees this consent is tamper-evident; the chain
+          // write just hasn't landed (or is retrying) yet.
+          <div className="mt-4 p-4 bg-secondary/5 rounded-lg border border-secondary/20 flex items-center gap-3">
+            <span className="material-symbols-outlined text-secondary">schedule</span>
+            <div>
+              <p className="text-body-sm font-semibold text-on-surface">Blockchain sync pending</p>
+              <p className="text-label-sm text-on-surface-variant">
+                Your consent is safely recorded in the tamper-evident ledger. The Solana confirmation is still syncing and will appear here automatically.
+              </p>
+            </div>
           </div>
         )}
         </div>

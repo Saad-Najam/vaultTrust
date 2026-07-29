@@ -150,6 +150,7 @@ export async function GET(request: Request) {
           sourceDiversityScore: scores.sourceDiversityScore,
           ivs: scores.ivs,
           eligibilityBandPKR: scores.eligibilityBandPKR,
+          breakdown: scores.breakdown,
         },
       };
 

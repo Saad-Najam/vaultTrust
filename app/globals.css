@@ -104,14 +104,23 @@ body {
               radial-gradient(circle at bottom left, rgba(0, 128, 128, 0.05), transparent);
 }
 
-@keyframes flow {
-  0% { stroke-dashoffset: 24; }
-  100% { stroke-dashoffset: 0; }
+@keyframes flow-bg {
+  from { background-position-y: 0; }
+  to { background-position-y: 10px; }
 }
 
-.flow-line {
-  stroke-dasharray: 8 4;
-  animation: flow 1s linear infinite;
+/* Fixed-width animated dashed bar — deliberately not SVG/viewBox-based, so
+   its width is always exactly what the element's own width utility says,
+   with no scaling dependent on an ancestor being positioned correctly. */
+.flow-line-bg {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    currentColor 0,
+    currentColor 6px,
+    transparent 6px,
+    transparent 10px
+  );
+  animation: flow-bg 0.5s linear infinite;
 }
 
 .hover-lift {

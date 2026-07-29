@@ -2,8 +2,29 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { doc, onSnapshot } from "firebase/firestore";
 import BankSidebar from "@/components/BankSidebar";
+import ExplainabilityCard from "@/components/ExplainabilityCard";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import { db } from "@/lib/firebase";
+
+// First 6 + last 4 characters, per the standard Explorer-link truncation format.
+function truncateSignature(sig: string | null | undefined): string {
+  if (!sig) return "";
+  if (sig.length <= 12) return sig;
+  return `${sig.slice(0, 6)}...${sig.slice(-4)}`;
+}
+
+function explorerTxUrl(sig: string): string {
+  return `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  GRANT: "Consent Granted",
+  SCOPE_CHANGE: "Consent Updated",
+  REVOKE: "Consent Revoked",
+  BANK_ACCESS: "Bank Accessed Data",
+};
 
 export default function Page() {
   const [freelancerId, setFreelancerId] = useState<string | null>(null);
@@ -11,6 +32,10 @@ export default function Page() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [verification, setVerification] = useState<any>(null);
+  const [auditTrail, setAuditTrail] = useState<any[]>([]);
+  // Read-only mirror of what app/api/v1/consent/revoke/route.ts has already
+  // written to Firestore — this listener never writes anything itself.
+  const [liveConsent, setLiveConsent] = useState<any>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -38,6 +63,20 @@ export default function Page() {
             } catch (verifyErr) {
               console.error("Verification check failed:", verifyErr);
             }
+
+            try {
+              const auditRes = await fetchWithAuth(`/api/v1/consent/${consentId}/audit-trail`);
+              const auditData = await auditRes.json();
+              if (auditData.success) {
+                setAuditTrail(
+                  [...auditData.entries].sort(
+                    (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                  )
+                );
+              }
+            } catch (auditErr) {
+              console.error("Audit trail fetch failed:", auditErr);
+            }
           }
         } else {
           setError(data.error);
@@ -51,6 +90,29 @@ export default function Page() {
     };
     fetchApplicant();
   }, [freelancerId]);
+
+  // Real-time consent status. Purely a mirror of Firestore — the freelancer's
+  // toggle (app/consent/active/page.tsx) calls the revoke API, which does the
+  // actual dual-write; this listener only observes the result live, it never
+  // writes anything itself.
+  const consentId = applicant?.consentInfo?.consentId;
+  useEffect(() => {
+    if (!consentId) return;
+    const unsubscribe = onSnapshot(
+      doc(db, "consents", consentId),
+      (snap) => {
+        if (snap.exists()) {
+          setLiveConsent(snap.data());
+        }
+      },
+      (err) => {
+        console.error("Real-time consent listener failed:", err);
+      }
+    );
+    return () => unsubscribe();
+  }, [consentId]);
+
+  const isLiveRevoked = liveConsent?.status === "REVOKED";
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -148,7 +210,11 @@ export default function Page() {
       </div>
       </header>
       {/*  Main Content Canvas  */}
-      <main className="ml-72 pt-24 px-margin-desktop pb-stack-lg bg-surface min-h-screen animate-fade-in">
+      <main
+        className={`ml-72 pt-24 px-margin-desktop pb-stack-lg bg-surface min-h-screen animate-fade-in transition-all duration-500 ${
+          isLiveRevoked ? "backdrop-blur-md opacity-50 pointer-events-none select-none" : ""
+        }`}
+      >
       
       {error ? (
         <div className="max-w-4xl mx-auto py-24 px-gutter flex flex-col items-center text-center">
@@ -337,7 +403,7 @@ export default function Page() {
                   <div className="flex gap-3 opacity-60">
                     <div className="mt-1 w-2 h-2 rounded-full bg-outline"></div>
                     <div>
-                      <p className="text-body-sm text-on-surface">Consent Ref: VT-{applicant.consentInfo?.consentId.substring(0, 8).toUpperCase()}</p>
+                      <p className="text-body-sm text-on-surface">Consent Ref: VT-{applicant.consentInfo?.consentId?.substring(0, 8).toUpperCase() || "—"}</p>
                       <p className="text-label-sm text-on-surface-variant">Granted on {new Date(applicant.consentInfo?.grantedAt).toLocaleDateString()}</p>
                     </div>
                   </div>
@@ -345,9 +411,11 @@ export default function Page() {
                 {verification?.transactionSignature && (
                   <div className="mt-4 p-3 bg-surface rounded-lg border border-outline-variant/30">
                     <p className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider mb-1">Tx Signature</p>
-                    <p className="text-[12px] font-mono text-on-surface truncate mb-2">{verification.transactionSignature}</p>
+                    <p className="text-[12px] font-mono text-on-surface mb-2" title={verification.transactionSignature}>
+                      {truncateSignature(verification.transactionSignature)}
+                    </p>
                     <a
-                      href={`https://explorer.solana.com/tx/${verification.transactionSignature}?cluster=devnet`}
+                      href={explorerTxUrl(verification.transactionSignature)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 text-primary text-label-sm font-bold hover:underline"
@@ -357,6 +425,61 @@ export default function Page() {
                     </a>
                   </div>
                 )}
+
+                {/* Audit Trail: grant -> updates -> revoke, each with its own timestamp.
+                    Only the most recent event can be honestly tied to the current
+                    on-chain signature (the backend keeps just one signature per
+                    consent, overwritten by whichever action last confirmed) — so
+                    the Explorer link only appears there, not fabricated per-row. */}
+                {auditTrail.length > 0 && (
+                  <div className="mt-6 pt-6 border-t border-outline-variant/20">
+                    <h5 className="text-label-md text-on-surface-variant font-bold mb-4">Audit Trail</h5>
+                    <ol className="space-y-4">
+                      {auditTrail.map((entry, idx) => {
+                        const isLast = idx === auditTrail.length - 1;
+                        const showSignature = isLast && verification?.transactionSignature;
+                        return (
+                          <li key={entry.id || idx} className="flex gap-3">
+                            <div className="flex flex-col items-center">
+                              <div
+                                className={`mt-1 w-2 h-2 rounded-full ${
+                                  entry.verified === false ? "bg-error" : "bg-primary"
+                                }`}
+                              ></div>
+                              {idx < auditTrail.length - 1 && (
+                                <div className="w-px flex-1 bg-outline-variant/40 mt-1"></div>
+                              )}
+                            </div>
+                            <div className="pb-1">
+                              <p className="text-body-sm font-semibold text-on-surface">
+                                {EVENT_LABELS[entry.eventType] || entry.eventType}
+                                {entry.verified === false && (
+                                  <span className="ml-2 text-error text-label-sm font-bold">Tampered</span>
+                                )}
+                              </p>
+                              <p className="text-label-sm text-on-surface-variant">
+                                {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "Unknown time"}
+                              </p>
+                              {showSignature && (
+                                <a
+                                  href={explorerTxUrl(verification.transactionSignature)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="mt-1 flex items-center gap-1 text-primary text-label-sm font-bold hover:underline"
+                                  title={verification.transactionSignature}
+                                >
+                                  {truncateSignature(verification.transactionSignature)}
+                                  <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+                                </a>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                )}
+
                 <Link href="/audit">
                   <button className="w-full mt-6 text-primary text-label-md font-bold hover:underline text-left">View Global Consent Registry</button>
                 </Link>
@@ -411,51 +534,41 @@ export default function Page() {
               </div>
             </div>
 
-            {/*  Identity Verification & Metadata  */}
-            <div className="bg-surface-container-lowest p-stack-lg rounded-2xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-white flex flex-col">
-              <h4 className="text-headline-sm text-primary mb-6">Verification Insights</h4>
-              <div className="grid grid-cols-2 gap-gutter flex-1">
-                <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/20">
-                  <p className="text-label-sm text-on-surface-variant mb-1">Consistency</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-headline-sm text-primary">High</span>
-                    <span className="material-symbols-outlined text-[#008080]" style={{"fontVariationSettings":"'FILL' 1"}}>shield_lock</span>
-                  </div>
-                  <p className="text-[10px] text-on-surface-variant mt-2">Variability within ±4% over 24 months</p>
-                </div>
-                <div className="p-4 rounded-xl bg-surface-container-low border border-outline-variant/20">
-                  <p className="text-label-sm text-on-surface-variant mb-1">Risk Profile</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-headline-sm text-primary">Minimal</span>
-                    <span className="material-symbols-outlined text-[#D4AF37]" style={{"fontVariationSettings":"'FILL' 1"}}>verified_user</span>
-                  </div>
-                  <p className="text-[10px] text-on-surface-variant mt-2">No derogatory flags in shared vault</p>
-                </div>
-                <div className="col-span-2 p-4 rounded-xl bg-surface-container-low border border-outline-variant/20 flex justify-between items-center">
-                  <div>
-                    <p className="text-label-sm text-on-surface-variant">Consented Sources</p>
-                    <p className="text-body-md font-bold text-primary">
-                      {applicant.consentInfo?.sourcesShared?.join(", ") || "None"}
-                    </p>
-                  </div>
-                  <div className="flex -space-x-2">
-                    <div className="w-8 h-8 rounded-full border-2 border-white bg-primary-container flex items-center justify-center text-[10px] text-white font-bold">H</div>
-                    <div className="w-8 h-8 rounded-full border-2 border-white bg-secondary flex items-center justify-center text-[10px] text-white font-bold">F</div>
-                    <div className="w-8 h-8 rounded-full border-2 border-white bg-tertiary-container flex items-center justify-center text-[10px] text-white font-bold">S</div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end">
-                <button className="flex items-center gap-2 text-label-md text-primary font-bold">
-                  Generate Summary PDF
-                  <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
-                </button>
-              </div>
-            </div>
+            {/*  Score Explainability — real breakdown from computeIncomeScore(), not mock content  */}
+            {applicant.incomeProfile?.breakdown && (
+              <ExplainabilityCard score={applicant.incomeProfile} />
+            )}
           </div>
         </div>
       ) : null}
       </main>
+
+      {/*  Real-time revocation overlay — reflects Firestore instantly via
+          onSnapshot, no page reload. Also surfaces blockchainStatus so the
+          demo proves the on-chain layer, not just a database flag.  */}
+      {isLiveRevoked && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-gutter">
+          <div className="bg-error text-white rounded-2xl shadow-2xl px-10 py-8 max-w-md w-full text-center border-4 border-error/40 animate-fade-in">
+            <span className="material-symbols-outlined text-5xl mb-3" style={{ fontVariationSettings: "'FILL' 1" }}>
+              block
+            </span>
+            <h2 className="text-headline-md font-headline-md font-bold mb-2">403: USER REVOKED ACCESS</h2>
+            <p className="text-body-md opacity-90 mb-4">Live feed disconnected by freelancer.</p>
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-label-sm font-bold ${
+                liveConsent?.blockchainStatus === "CONFIRMED" ? "bg-white/25" : "bg-white/10"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[15px]">
+                {liveConsent?.blockchainStatus === "CONFIRMED" ? "verified" : "schedule"}
+              </span>
+              {liveConsent?.blockchainStatus === "CONFIRMED"
+                ? "Blockchain-confirmed revocation"
+                : "Revocation pending blockchain confirmation..."}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/*  Floating Action Button (Contextual)  */}
       <button className="fixed bottom-8 right-8 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-50">

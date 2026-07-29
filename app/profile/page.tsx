@@ -89,45 +89,7 @@ export default function Page() {
 
   return (
     <>
-      {/*  SideNavBar Execution  */}
-      <nav className="h-screen w-64 fixed left-0 top-0 bg-surface dark:bg-inverse-surface shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col py-stack-lg z-50">
-      <div className="px-6 mb-10">
-      <h1 className="text-headline-md font-headline-md font-extrabold text-primary dark:text-inverse-primary">VaultTrust</h1>
-      <p className="text-label-sm font-label-sm text-on-surface-variant/70 mt-1">Freelancer Portal</p>
-      </div>
-      <div className="flex-1 space-y-1">
-      <a className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors" href="#">
-      <span className="material-symbols-outlined mr-3">dashboard</span>
-      <span className="text-label-md font-label-md">Overview</span>
-      </a>
-      <a className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors" href="#">
-      <span className="material-symbols-outlined mr-3">account_balance</span>
-      <span className="text-label-md font-label-md">Connected Accounts</span>
-      </a>
-      <a className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors" href="#">
-      <span className="material-symbols-outlined mr-3">verified_user</span>
-      <span className="text-label-md font-label-md">Consent Center</span>
-      </a>
-      <a className="flex items-center px-6 py-3 text-primary dark:text-inverse-primary font-bold border-r-4 border-primary dark:border-inverse-primary bg-primary-container/10" href="#">
-      <span className="material-symbols-outlined mr-3">payments</span>
-      <span className="text-label-md font-label-md">Income Profile</span>
-      </a>
-      <a className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors" href="#">
-      <span className="material-symbols-outlined mr-3">receipt_long</span>
-      <span className="text-label-md font-label-md">Activity &amp; Audit Trail</span>
-      </a>
-      <a className="flex items-center px-6 py-3 text-on-surface-variant dark:text-surface-variant hover:bg-surface-container dark:hover:bg-surface-container-highest transition-colors" href="#">
-      <span className="material-symbols-outlined mr-3">settings</span>
-      <span className="text-label-md font-label-md">Settings</span>
-      </a>
-      </div>
-      <div className="px-6 mt-auto">
-      <button className="w-full bg-primary-container text-on-primary py-4 px-4 rounded-xl font-label-md text-center shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2">
-      <span className="material-symbols-outlined text-[18px]">verified</span>
-                      View Active Consents
-                  </button>
-      </div>
-      </nav>
+      <FreelancerSidebar />
       {/*  Main Content Canvas  */}
       <main className="ml-64 min-h-screen animate-fade-in">
       {/*  TopAppBar Execution  */}

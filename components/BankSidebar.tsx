@@ -17,7 +17,7 @@ export default function BankSidebar() {
   return (
     <aside className="w-64 bg-white fixed left-0 top-0 h-screen flex flex-col py-8 shadow-[4px_0px_20px_rgba(0,0,0,0.08)] z-30 overflow-y-auto border-r border-gray-100">
       {/* Logo */}
-      <div className="px-6 mb-8 flex items-center gap-3">
+      <Link href="/" className="px-6 mb-8 flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-[#004a3b] flex items-center justify-center">
           <span className="material-symbols-outlined text-white text-[20px]">account_balance</span>
         </div>
@@ -25,7 +25,7 @@ export default function BankSidebar() {
           <h1 className="text-headline-sm font-bold text-[#004a3b]">UBL Digital</h1>
           <p className="text-label-sm text-gray-400 mt-0">Enterprise Portal</p>
         </div>
-      </div>
+      </Link>
 
       {/* Nav links */}
       <nav className="flex-1">

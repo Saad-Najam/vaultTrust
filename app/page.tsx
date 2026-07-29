@@ -71,12 +71,12 @@ export default function Page() {
             <div className="block lg:hidden animate-fade-in">
               {/*  Top App Bar  */}
               <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-5 h-16 bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
-              <div className="flex items-center gap-3">
+              <Link href="/" className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <span className="material-symbols-outlined text-white text-[18px]" data-icon="shield">shield</span>
               </div>
               <h1 className="text-headline-sm font-headline-sm font-bold text-primary">VaultTrust</h1>
-              </div>
+              </Link>
               <div className="flex items-center gap-4">
               <button className="hover:bg-surface-container-high rounded-full p-2 transition-opacity active:opacity-80">
               <span className="material-symbols-outlined text-on-surface-variant" data-icon="notifications">notifications</span>
@@ -254,16 +254,19 @@ export default function Page() {
             <div className="hidden lg:block animate-fade-in">
               {/*  Top Navigation (Shell suppressed for Landing context, using Landing Nav)  */}
               <nav className="sticky top-0 z-50 w-full px-margin-mobile md:px-margin-desktop h-20 flex justify-between items-center glass-card border-none">
-              <div className="flex items-center gap-2">
+              <Link href="/" className="flex items-center gap-2">
               <span className="text-primary font-extrabold text-headline-sm tracking-tight">VaultTrust</span>
               <span className="bg-tertiary-container/20 text-on-tertiary-container px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider">MOCK DEMO</span>
-              </div>
+              </Link>
               <div className="hidden md:flex items-center gap-stack-lg">
               <a className="text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">How it works</a>
               <a className="text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Security</a>
               <a className="text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">FAQ</a>
-              <Link href="/dashboard">
-                <button className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-md hover:opacity-90 transition-opacity">Login</button>
+              <Link href="/login">
+                <button className="border border-outline/30 text-primary px-6 py-2.5 rounded-lg font-label-md hover:bg-surface-container-highest/50 transition-colors">Login</button>
+              </Link>
+              <Link href="/signup">
+                <button className="bg-primary text-on-primary px-6 py-2.5 rounded-lg font-label-md hover:opacity-90 transition-opacity">Sign Up</button>
               </Link>
               </div>
               <button className="md:hidden text-primary">
@@ -271,7 +274,7 @@ export default function Page() {
               </button>
               </nav>
               <main className="max-w-container-max mx-auto px-margin-mobile md:px-margin-desktop py-stack-lg lg:py-24">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
               {/*  Left: Content  */}
               <div className="lg:col-span-6 flex flex-col gap-stack-lg">
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary-fixed text-on-primary-fixed rounded-full w-fit">
@@ -347,11 +350,9 @@ export default function Page() {
               </div>
               </div>
               {/*  Connector 1  */}
-              <div className="h-16 w-px bg-gradient-to-b from-primary/40 to-primary flex items-center justify-center relative">
+              <div className="h-16 flex items-center justify-center relative">
               <div className="absolute w-2 h-2 bg-primary rounded-full animate-ping"></div>
-              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 2 64">
-              <line className="text-primary flow-line" stroke="currentColor" strokeWidth="2" x1="1" x2="1" y1="0" y2="64"></line>
-              </svg>
+              <div className="w-[2px] h-full text-primary flow-line-bg"></div>
               </div>
               {/*  Core: VaultTrust  */}
               <div className="relative group">
@@ -366,10 +367,8 @@ export default function Page() {
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 border border-primary/10 rounded-full animate-[ping_4s_linear_infinite]"></div>
               </div>
               {/*  Connector 2  */}
-              <div className="h-16 w-px bg-gradient-to-b from-primary to-secondary flex items-center justify-center">
-              <svg className="absolute inset-0 w-full h-full" viewBox="0 0 2 64">
-              <line className="text-secondary flow-line" stroke="currentColor" strokeWidth="2" x1="1" x2="1" y1="0" y2="64"></line>
-              </svg>
+              <div className="h-16 flex items-center justify-center relative">
+              <div className="w-[2px] h-full text-secondary flow-line-bg"></div>
               </div>
               {/*  Destination: UBL  */}
               <div className="w-full bg-secondary-container/20 border border-secondary/20 p-6 rounded-3xl flex flex-col items-center gap-4 hover-lift">

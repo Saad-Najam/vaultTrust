@@ -6,6 +6,23 @@ const FX_RATES: Record<string, number> = {
   PKR: 1,
 };
 
+// A single factor's contribution to the final `ivs` — `points`/`maxPoints` are
+// literally `weight * rawScore` / `weight * 100` for that same weight already
+// used in the ivs formula below, not a re-derivation.
+export interface ScoreBreakdownFactor {
+  label: string;
+  rawScore: number; // the underlying 0-100 sub-score, before weighting
+  points: number; // weighted contribution actually added to ivs
+  maxPoints: number; // weighted contribution if this factor were a perfect 100
+}
+
+export interface ScoreBreakdown {
+  incomeLevel: ScoreBreakdownFactor;
+  incomeStability: ScoreBreakdownFactor;
+  trend: ScoreBreakdownFactor;
+  clientDiversity: ScoreBreakdownFactor;
+}
+
 export interface ComputedScoreResult {
   avgMonthlyIncome: number;
   coefficientOfVariation: number;
@@ -13,6 +30,7 @@ export interface ComputedScoreResult {
   sourceDiversityScore: number;
   ivs: number;
   eligibilityBandPKR: string;
+  breakdown: ScoreBreakdown;
 }
 
 /**
@@ -42,6 +60,12 @@ export function computeIncomeScore(transactions: Transaction[]): ComputedScoreRe
       sourceDiversityScore: 0,
       ivs: 0,
       eligibilityBandPKR: "Micro-credit / BNPL up to PKR 30,000",
+      breakdown: {
+        incomeLevel: { label: "Income Level", rawScore: 0, points: 0, maxPoints: 40 },
+        incomeStability: { label: "Income Stability", rawScore: 0, points: 0, maxPoints: 25 },
+        trend: { label: "Income Trend", rawScore: 0, points: 0, maxPoints: 20 },
+        clientDiversity: { label: "Client Diversity", rawScore: 0, points: 0, maxPoints: 15 },
+      },
     };
   }
 
@@ -160,6 +184,36 @@ export function computeIncomeScore(transactions: Transaction[]): ComputedScoreRe
     eligibilityBandPKR = "Classic Credit Card / BNPL up to PKR 100,000";
   }
 
+  // Breakdown — same incomeScore/consistencyScore/trendScore/diversityScore
+  // and same 0.40/0.25/0.20/0.15 weights already used for `ivs` above, just
+  // also exposed per-factor instead of only as their combined sum.
+  const breakdown: ScoreBreakdown = {
+    incomeLevel: {
+      label: "Income Level",
+      rawScore: Math.round(incomeScore),
+      points: Math.round(0.4 * incomeScore),
+      maxPoints: 40,
+    },
+    incomeStability: {
+      label: "Income Stability",
+      rawScore: Math.round(consistencyScore),
+      points: Math.round(0.25 * consistencyScore),
+      maxPoints: 25,
+    },
+    trend: {
+      label: "Income Trend",
+      rawScore: Math.round(trendScore),
+      points: Math.round(0.2 * trendScore),
+      maxPoints: 20,
+    },
+    clientDiversity: {
+      label: "Client Diversity",
+      rawScore: Math.round(diversityScore),
+      points: Math.round(0.15 * diversityScore),
+      maxPoints: 15,
+    },
+  };
+
   return {
     avgMonthlyIncome,
     coefficientOfVariation,
@@ -167,5 +221,6 @@ export function computeIncomeScore(transactions: Transaction[]): ComputedScoreRe
     sourceDiversityScore,
     ivs,
     eligibilityBandPKR,
+    breakdown,
   };
 }
