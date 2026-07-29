@@ -46,6 +46,7 @@ yarn-error.log*
 
 # anchor / rust build artifacts (includes program keypairs under target/deploy)
 /target/
+!/target/types/
 /.anchor/
 
 # vercel

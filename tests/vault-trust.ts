@@ -4,7 +4,7 @@ import { Program } from "@coral-xyz/anchor";
 import { PublicKey, Keypair, SystemProgram, Transaction } from "@solana/web3.js";
 import { createHash } from "crypto";
 import { assert } from "chai";
-import type { VaultTrust } from "../target/types/vault_trust";
+import type { VaultTrust } from "../lib/blockchain/idl/vault_trust";
 
 function sha256(input: string): number[] {
   return Array.from(createHash("sha256").update(input).digest());
