@@ -4,6 +4,7 @@ import { verifyAuthToken } from "@/lib/auth_helper";
 import { getKycProvider } from "@/lib/kyc";
 import { getAdminAuth } from "@/lib/firebase_admin";
 import { z } from "zod";
+import { getErrorMessage } from "@/lib/errors";
 
 const onboardingSchema = z.object({
   name: z.string().optional(),
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     let body = {};
     try {
       body = await request.json();
-    } catch (e) {
+    } catch {
       // Ignore empty body
     }
     const validated = onboardingSchema.parse(body);
@@ -38,8 +39,8 @@ export async function POST(request: Request) {
       try {
         await adminAuth.setCustomUserClaims(authUser.uid, { role: finalRole });
         console.log(`[Auth] Set custom claim role: ${finalRole} for uid: ${authUser.uid}`);
-      } catch (err: any) {
-        console.error("[Auth] Failed to set custom claims:", err.message || err);
+      } catch (err) {
+        console.error("[Auth] Failed to set custom claims:", getErrorMessage(err));
       }
     }
 
@@ -68,13 +69,13 @@ export async function POST(request: Request) {
       role: finalRole,
       providerRef: kycResult.providerRef,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Onboarding endpoint error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json({ success: false, error: error.issues }, { status: 400 });
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

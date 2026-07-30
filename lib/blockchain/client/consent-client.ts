@@ -8,6 +8,7 @@ import {
   getCustodialWalletPublicKey,
 } from "../utils/custodial-wallet";
 import { classifyBlockchainError, withRetry, withTimeout } from "../utils/errors";
+import { errorIncludes } from "@/lib/errors";
 
 const RPC_TIMEOUT_MS = 25_000;
 
@@ -76,6 +77,12 @@ export async function grantConsent(params: GrantConsentParams): Promise<GrantCon
             bankWallet: bankWallet,
             feePayer: getServiceWalletPublicKey(),
             systemProgram: SystemProgram.programId,
+          // Anchor's IDL-generated account type rejects the resolvable
+          // feePayer/systemProgram entries the runtime accepts. Retyping needs
+          // generated IDL types from `anchor build` (target/ is not built here)
+          // and would alter live on-chain calls that cannot be verified without
+          // devnet access, so the cast is kept deliberately and scoped to here.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any)
           .signers([freelancerKeypair])
           .rpc(),
@@ -122,6 +129,12 @@ export async function updateConsent(params: UpdateConsentParams): Promise<{ sign
             consent: consentPda,
             userAuthority: freelancerWallet,
             bankWallet: bankWallet,
+          // Anchor's IDL-generated account type rejects the resolvable
+          // feePayer/systemProgram entries the runtime accepts. Retyping needs
+          // generated IDL types from `anchor build` (target/ is not built here)
+          // and would alter live on-chain calls that cannot be verified without
+          // devnet access, so the cast is kept deliberately and scoped to here.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any)
           .signers([freelancerKeypair])
           .rpc(),
@@ -157,6 +170,12 @@ export async function revokeConsent(params: RevokeConsentParams): Promise<{ sign
             consent: consentPda,
             userAuthority: freelancerWallet,
             bankWallet: bankWallet,
+          // Anchor's IDL-generated account type rejects the resolvable
+          // feePayer/systemProgram entries the runtime accepts. Retyping needs
+          // generated IDL types from `anchor build` (target/ is not built here)
+          // and would alter live on-chain calls that cannot be verified without
+          // devnet access, so the cast is kept deliberately and scoped to here.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any)
           .signers([freelancerKeypair])
           .rpc(),
@@ -198,6 +217,12 @@ export async function logBankAccess(params: LogBankAccessParams): Promise<LogBan
             consent: consentPda,
             userAuthority: freelancerWallet,
             bankWallet: bankWallet,
+          // Anchor's IDL-generated account type rejects the resolvable
+          // feePayer/systemProgram entries the runtime accepts. Retyping needs
+          // generated IDL types from `anchor build` (target/ is not built here)
+          // and would alter live on-chain calls that cannot be verified without
+          // devnet access, so the cast is kept deliberately and scoped to here.
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any)
           .signers([bankKeypair])
           .rpc(),
@@ -258,8 +283,8 @@ export async function getOnChainConsent(
       lastAccessedAt: account.lastAccessedAt.toNumber(),
       status: "active" in account.status ? "Active" : "Revoked",
     };
-  } catch (err: any) {
-    if (err.message?.includes("Account does not exist")) return null;
+  } catch (err) {
+    if (errorIncludes(err, "Account does not exist")) return null;
     throw err;
   }
 }

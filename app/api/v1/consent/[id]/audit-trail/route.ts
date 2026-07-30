@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { verifyLedgerChain } from "@/lib/ledger";
+import { getErrorMessage } from "@/lib/errors";
 
 // Read-only: exposes ledger entries (with per-entry hash-chain verification,
 // same as /api/v1/audit/ledger) for a single consent so the Freelancer and
@@ -37,10 +38,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       consentId,
       entries,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Audit trail API endpoint error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

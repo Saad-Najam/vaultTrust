@@ -1,15 +1,23 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import type { VerifiedLedgerEntry } from "@/lib/api_types";
+
+/** The ledger stores no actor column; the event type implies who acted. */
+const ACTOR_BY_EVENT: Record<string, string> = {
+  GRANT: "Freelancer",
+  SCOPE_CHANGE: "Freelancer",
+  REVOKE: "Freelancer",
+  BANK_ACCESS: "Bank Officer",
+};
 
 export default function Page() {
-  const [ledger, setLedger] = useState<any[]>([]);
+  const [ledger, setLedger] = useState<VerifiedLedgerEntry[]>([]);
   const [verified, setVerified] = useState(true);
-  const [selectedBlock, setSelectedBlock] = useState<any>(null);
+  const [selectedBlock, setSelectedBlock] = useState<VerifiedLedgerEntry | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,64 +40,6 @@ export default function Page() {
     };
     fetchLedger();
   }, []);
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
-    }
-  };
 
   return (
     <>
@@ -154,12 +104,12 @@ export default function Page() {
       </tr>
       </thead>
       <tbody className="divide-y divide-surface-container text-on-surface">
-      {ledger.map((block: any) => {
+      {ledger.map((block) => {
         const date = new Date(block.timestamp);
-        const isSelected = selectedBlock?.index === block.index;
+        const isSelected = selectedBlock?.id === block.id;
         return (
           <tr 
-            key={block.index} 
+            key={block.id} 
             className={`hover:bg-surface-container-low transition-colors cursor-pointer group ${isSelected ? 'bg-primary/5 border-l-4 border-primary' : ''}`} 
             onClick={() => setSelectedBlock(block)}
           >
@@ -177,13 +127,13 @@ export default function Page() {
                 <span className="font-medium text-body-sm">{block.eventType}</span>
               </div>
             </td>
-            <td className="px-6 py-5 text-body-sm">{block.actor || "System Auth"}</td>
+            <td className="px-6 py-5 text-body-sm">{ACTOR_BY_EVENT[block.eventType] || "System Auth"}</td>
             <td className="px-6 py-5 text-body-sm font-mono text-secondary">
               {block.consentId ? `#VT-${block.consentId.substring(0, 6).toUpperCase()}` : "---"}
             </td>
             <td className="px-6 py-5">
               <span className="text-[12px] font-mono bg-surface-container px-2 py-1 rounded opacity-70">
-                {block.hash.substring(0, 8)}
+                {block.thisHash?.substring(0, 8) || "—"}
               </span>
             </td>
           </tr>
@@ -217,7 +167,7 @@ export default function Page() {
           <div className="flex items-center justify-between mb-4">
           <span className="text-label-sm uppercase tracking-widest opacity-80">Block Detail</span>
           </div>
-          <h3 className="text-headline-sm font-headline-sm">Block #{selectedBlock.index}</h3>
+          <h3 className="text-headline-sm font-headline-sm">Block {selectedBlock.id}</h3>
           <p className="text-body-sm opacity-90 mt-1">{selectedBlock.eventType}</p>
           </div>
           <div className="p-6 space-y-6">
@@ -230,7 +180,7 @@ export default function Page() {
           </div>
           <div className="bg-surface-container-low p-3 rounded-xl border border-secondary/20">
           <span className="text-[10px] font-bold text-secondary uppercase block mb-1">Current Hash</span>
-          <p className="text-[12px] font-mono break-all text-primary font-bold">{selectedBlock.hash}</p>
+          <p className="text-[12px] font-mono break-all text-primary font-bold">{selectedBlock.thisHash}</p>
           </div>
           </div>
           </div>
@@ -241,13 +191,24 @@ export default function Page() {
           </div>
           <div>
           <label className="text-label-sm font-label-md text-on-surface-variant block mb-1">Actor</label>
-          <p className="text-body-sm font-bold">{selectedBlock.actor || "System"}</p>
+          <p className="text-body-sm font-bold">{ACTOR_BY_EVENT[selectedBlock.eventType] || "System"}</p>
           </div>
           </div>
           <div>
           <label className="text-label-sm font-label-md text-on-surface-variant block mb-2">Payload Summary</label>
           <pre className="bg-inverse-surface text-white p-4 rounded-xl text-[12px] font-mono leading-relaxed overflow-x-auto">
-            {JSON.stringify(selectedBlock.payload, null, 2)}
+            {JSON.stringify(
+              {
+                eventType: selectedBlock.eventType,
+                payloadHash: selectedBlock.payloadHash,
+                prevHash: selectedBlock.prevHash,
+                thisHash: selectedBlock.thisHash,
+                verified: selectedBlock.verified,
+                ...(selectedBlock.reason ? { reason: selectedBlock.reason } : {}),
+              },
+              null,
+              2
+            )}
           </pre>
           </div>
           <button className="w-full py-4 border-2 border-primary text-primary rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all">

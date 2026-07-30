@@ -1,4 +1,4 @@
-import { Transaction } from "./db";
+import { CreditCardAccount, Transaction } from "./db";
 
 const FX_RATES: Record<string, number> = {
   USD: 280,
@@ -222,5 +222,179 @@ export function computeIncomeScore(transactions: Transaction[]): ComputedScoreRe
     ivs,
     eligibilityBandPKR,
     breakdown,
+  };
+}
+
+// ─── SpendSmart / Credit Card Intelligence ────────────────────────────────────
+
+/** Recommended-limit guard rails, so an outlier month can't produce a silly offer. */
+const RECOMMENDED_LIMIT_FLOOR_PKR = 25_000;
+const RECOMMENDED_LIMIT_CEILING_PKR = 1_000_000;
+/** Offers are rounded down to this step to read like a real bank product. */
+const RECOMMENDED_LIMIT_STEP_PKR = 10_000;
+/** Multiple of monthly free cash flow a partner bank will extend. */
+const FREE_CASH_FLOW_MULTIPLE = 3.5;
+
+export type DtiTier = "LOW" | "MODERATE" | "HIGH";
+export type BadgeStatus = "HEALTHY" | "WATCH" | "AT_RISK" | "UNKNOWN";
+
+export interface SpendCreditBadge {
+  label: string;
+  status: BadgeStatus;
+  detail: string;
+}
+
+export interface SpendCreditMetrics {
+  hasCards: boolean;
+  cardCount: number;
+
+  totalCreditLimitPKR: number;
+  totalStatementBalancePKR: number;
+  /** Sum of minimum payments due — the recurring monthly obligation. */
+  totalMonthlyObligationPKR: number;
+
+  /** Balance as a share of limit. Null when no limit is known. */
+  utilizationPercent: number | null;
+  /** (obligations / verified monthly income) * 100. Null when income is unknown. */
+  dtiPercent: number | null;
+  dtiTier: DtiTier;
+
+  verifiedMonthlyIncomePKR: number;
+  netFreeCashFlowPKR: number;
+  recommendedCreditLimitPKR: number;
+
+  onTimeRepaymentPercent: number | null;
+
+  badges: {
+    utilization: SpendCreditBadge;
+    repayment: SpendCreditBadge;
+    dti: SpendCreditBadge;
+  };
+}
+
+function tierForDti(dtiPercent: number | null, hasObligations: boolean): DtiTier {
+  // No income on record but real obligations is the worst case, not the best —
+  // a naive `obligations / 0` would yield Infinity, so it is handled explicitly.
+  if (dtiPercent === null) return hasObligations ? "HIGH" : "LOW";
+  if (dtiPercent < 20) return "LOW";
+  if (dtiPercent <= 35) return "MODERATE";
+  return "HIGH";
+}
+
+/**
+ * Derives spending/credit health from linked cards and verified income.
+ *
+ * Kept separate from `computeIncomeScore` so that obligations can never leak
+ * into the IVS: income scoring answers "how reliable are the earnings", this
+ * answers "how much of them is already committed".
+ *
+ * - DTI            = (monthly card obligations / verified monthly income) * 100
+ * - Net free cash  = verified monthly income − monthly card obligations
+ * - Recommended    = net free cash × 3.5, clamped to a healthy band
+ */
+export function computeSpendCreditMetrics(
+  cards: CreditCardAccount[],
+  verifiedMonthlyIncomePKR: number
+): SpendCreditMetrics {
+  const totalCreditLimitPKR = cards.reduce((s, c) => s + (c.creditLimitPKR || 0), 0);
+  const totalStatementBalancePKR = cards.reduce(
+    (s, c) => s + (c.statementBalancePKR || 0),
+    0
+  );
+  const totalMonthlyObligationPKR = cards.reduce(
+    (s, c) => s + (c.minPaymentDuePKR || 0),
+    0
+  );
+
+  const utilizationPercent =
+    totalCreditLimitPKR > 0
+      ? Math.round((totalStatementBalancePKR / totalCreditLimitPKR) * 100)
+      : null;
+
+  const income = Math.max(0, verifiedMonthlyIncomePKR || 0);
+  const dtiPercent =
+    income > 0 ? Math.round((totalMonthlyObligationPKR / income) * 100) : null;
+  const dtiTier = tierForDti(dtiPercent, totalMonthlyObligationPKR > 0);
+
+  // Free cash flow can legitimately go negative (obligations exceed earnings);
+  // that is signal, so it is reported as-is rather than floored at zero.
+  const netFreeCashFlowPKR = Math.round(income - totalMonthlyObligationPKR);
+
+  const rawRecommended = netFreeCashFlowPKR * FREE_CASH_FLOW_MULTIPLE;
+  const recommendedCreditLimitPKR =
+    netFreeCashFlowPKR <= 0 || income <= 0
+      ? 0
+      : Math.min(
+          RECOMMENDED_LIMIT_CEILING_PKR,
+          Math.max(
+            RECOMMENDED_LIMIT_FLOOR_PKR,
+            Math.floor(rawRecommended / RECOMMENDED_LIMIT_STEP_PKR) *
+              RECOMMENDED_LIMIT_STEP_PKR
+          )
+        );
+
+  const totalPayments = cards.reduce((s, c) => s + (c.totalPayments || 0), 0);
+  const onTimePayments = cards.reduce((s, c) => s + (c.onTimePayments || 0), 0);
+  const onTimeRepaymentPercent =
+    totalPayments > 0 ? Math.round((onTimePayments / totalPayments) * 100) : null;
+
+  return {
+    hasCards: cards.length > 0,
+    cardCount: cards.length,
+    totalCreditLimitPKR,
+    totalStatementBalancePKR,
+    totalMonthlyObligationPKR,
+    utilizationPercent,
+    dtiPercent,
+    dtiTier,
+    verifiedMonthlyIncomePKR: income,
+    netFreeCashFlowPKR,
+    recommendedCreditLimitPKR,
+    onTimeRepaymentPercent,
+    badges: {
+      utilization: {
+        label: "Credit Utilisation",
+        status:
+          utilizationPercent === null
+            ? "UNKNOWN"
+            : utilizationPercent < 30
+              ? "HEALTHY"
+              : utilizationPercent <= 50
+                ? "WATCH"
+                : "AT_RISK",
+        detail:
+          utilizationPercent === null
+            ? "No card linked"
+            : utilizationPercent < 30
+              ? `${utilizationPercent}% — healthy (under 30%)`
+              : `${utilizationPercent}% of available limit in use`,
+      },
+      repayment: {
+        label: "On-Time Repayment",
+        status:
+          onTimeRepaymentPercent === null
+            ? "UNKNOWN"
+            : onTimeRepaymentPercent >= 95
+              ? "HEALTHY"
+              : onTimeRepaymentPercent >= 80
+                ? "WATCH"
+                : "AT_RISK",
+        detail:
+          onTimeRepaymentPercent === null
+            ? "No repayment history yet"
+            : `${onTimeRepaymentPercent}% of ${totalPayments} payments on time`,
+      },
+      dti: {
+        label: "Debt-to-Income",
+        status:
+          dtiTier === "LOW" ? "HEALTHY" : dtiTier === "MODERATE" ? "WATCH" : "AT_RISK",
+        detail:
+          dtiPercent === null
+            ? totalMonthlyObligationPKR > 0
+              ? "Obligations recorded with no verified income"
+              : "No obligations recorded"
+            : `${dtiPercent}% of verified income committed`,
+      },
+    },
   };
 }

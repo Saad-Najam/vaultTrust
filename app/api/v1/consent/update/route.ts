@@ -5,6 +5,7 @@ import { appendLedgerEntry } from "@/lib/ledger";
 import { updateConsent as updateConsentOnChain } from "@/lib/blockchain/client/consent-client";
 import { PLATFORMS } from "@/lib/platforms";
 import { z } from "zod";
+import { getErrorMessage } from "@/lib/errors";
 
 const UpdateConsentSchema = z.object({
   consentId: z.string().optional(),
@@ -90,15 +91,15 @@ export async function PUT(request: Request) {
         blockchainStatus: "CONFIRMED",
         solanaTxSignature: onChain.signature,
       });
-    } catch (chainError: any) {
+    } catch (chainError) {
       console.error("[BLOCKCHAIN WRITE FAILED - update_consent]", {
         consentId: consent.id,
-        error: chainError.message || chainError,
+        error: getErrorMessage(chainError),
       });
       try {
         await dbService.updateConsent(consent.id, {
           blockchainStatus: "FAILED",
-          blockchainError: chainError.message || String(chainError),
+          blockchainError: getErrorMessage(chainError),
         });
       } catch (statusUpdateError) {
         console.error("[FAILED TO RECORD BLOCKCHAIN FAILURE STATUS]", { consentId: consent.id, statusUpdateError });
@@ -117,13 +118,13 @@ export async function PUT(request: Request) {
       blockchain,
       message: "Consent scope updated and recorded in ledger.",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Update consent API endpoint error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json({ success: false, error: error.issues }, { status: 400 });
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

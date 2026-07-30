@@ -1,6 +1,6 @@
 import { dbService, User, FreelancerProfile, ConnectedSource } from "./db";
 import { SandboxAdapter } from "./adapters";
-import { Platform } from "./platforms";
+import { IncomePlatform } from "./platforms";
 import { recomputeAndPersistScore } from "./score_service";
 
 /**
@@ -15,7 +15,7 @@ import { recomputeAndPersistScore } from "./score_service";
  */
 export async function seedSandboxSourcesForUser(
   uid: string,
-  platforms: Platform[]
+  platforms: IncomePlatform[]
 ): Promise<{ sources: number; transactions: number }> {
   const adapter = new SandboxAdapter();
   const connectedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -47,7 +47,7 @@ export async function seedSandboxSourcesForUser(
   return { sources: platforms.length, transactions: transactionCount };
 }
 
-const DEMO_SOURCES: Record<string, Platform[]> = {
+const DEMO_SOURCES: Record<string, IncomePlatform[]> = {
   "ahmed-raza-id": ["PAYONEER", "BANK_TRANSFER", "LOCAL_INVOICING"],
   "sana-malik-id": ["PAYONEER", "BANK_TRANSFER", "NAYAPAY", "EASYPAISA"],
 };

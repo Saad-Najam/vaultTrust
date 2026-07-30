@@ -3,7 +3,9 @@ import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { getPlatformAdapter } from "@/lib/adapters";
 import { recomputeAndPersistScore, toScoreResponse } from "@/lib/score_service";
+import { isIncomePlatform } from "@/lib/platforms";
 import { z } from "zod";
+import { getErrorMessage } from "@/lib/errors";
 
 const syncSchema = z.object({
   // Omit to sync every connected source.
@@ -39,9 +41,11 @@ export async function POST(request: Request) {
     }
 
     const allSources = await dbService.listConnectedSources(authUser.uid);
+    // Income sources only — credit cards refresh via the credit-card connector.
     const targets = allSources.filter(
       (s) =>
         s.status === "CONNECTED" &&
+        isIncomePlatform(s.platform) &&
         (!validated.sourceId || s.id === validated.sourceId)
     );
 
@@ -64,6 +68,7 @@ export async function POST(request: Request) {
     // One provider failing must not abort the rest of the sync.
     for (const source of targets) {
       try {
+        if (!isIncomePlatform(source.platform)) continue;
         const adapter = getPlatformAdapter(source.platform);
         const transactions = await adapter.fetchTransactions(
           authUser.uid,
@@ -81,11 +86,11 @@ export async function POST(request: Request) {
           lastSyncedAt: syncedAt,
         });
         synced.push(source.id);
-      } catch (err: any) {
+      } catch (err) {
         console.error(`[Sync] Source ${source.id} failed:`, err);
         failed.push({
           sourceId: source.id,
-          error: err?.message || "Sync failed for this source.",
+          error: getErrorMessage(err, "Sync failed for this source."),
         });
       }
     }
@@ -105,7 +110,7 @@ export async function POST(request: Request) {
           ? `Synced ${synced.length} source(s); ${failed.length} failed.`
           : `Synced ${synced.length} source(s) successfully.`,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("[Sync POST] Error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -114,7 +119,7 @@ export async function POST(request: Request) {
       );
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

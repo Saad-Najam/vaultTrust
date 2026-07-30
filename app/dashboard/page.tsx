@@ -6,7 +6,9 @@ import FreelancerSidebar from "@/components/FreelancerSidebar";
 import { normalizeAmountToPKR } from "@/lib/scoring";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { useCurrentUser } from "@/lib/use_current_user";
-import { PLATFORMS, PLATFORM_META } from "@/lib/platforms";
+import { INCOME_PLATFORMS, PLATFORM_META } from "@/lib/platforms";
+import type { Consent, ReliabilityResponse, SummaryResponse } from "@/lib/api_types";
+import type { IncomePlatform } from "@/lib/platforms";
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -14,11 +16,360 @@ function getInitials(name: string): string {
   return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() || "").join("");
 }
 
+const PKR = (n: number) => `PKR ${Math.round(n).toLocaleString()}`;
+
+interface SpendCreditBadge {
+  label: string;
+  status: "HEALTHY" | "WATCH" | "AT_RISK" | "UNKNOWN";
+  detail: string;
+}
+
+interface SpendCredit {
+  hasCards: boolean;
+  cardCount: number;
+  totalCreditLimitPKR: number;
+  totalStatementBalancePKR: number;
+  totalMonthlyObligationPKR: number;
+  utilizationPercent: number | null;
+  dtiPercent: number | null;
+  dtiTier: "LOW" | "MODERATE" | "HIGH";
+  verifiedMonthlyIncomePKR: number;
+  netFreeCashFlowPKR: number;
+  recommendedCreditLimitPKR: number;
+  onTimeRepaymentPercent: number | null;
+  badges: {
+    utilization: SpendCreditBadge;
+    repayment: SpendCreditBadge;
+    dti: SpendCreditBadge;
+  };
+}
+
+interface Eligibility {
+  tier: "MICRO" | "CLASSIC" | "GOLD" | "PLATINUM";
+  label: string;
+  maxLimitPKR: number;
+  baseTier: "MICRO" | "CLASSIC" | "GOLD" | "PLATINUM";
+  disclosure: "SHARED" | "DECLARED_NONE" | "NOT_SHARED";
+  capped: boolean;
+  capReason: string | null;
+  tierIfDisclosed: "MICRO" | "CLASSIC" | "GOLD" | "PLATINUM" | null;
+  selfAttested: boolean;
+  notes: string[];
+}
+
+const DTI_TIER_STYLE: Record<
+  SpendCredit["dtiTier"],
+  { color: string; label: string }
+> = {
+  LOW: { color: "#003127", label: "Low risk" },
+  MODERATE: { color: "#735c00", label: "Moderate risk" },
+  HIGH: { color: "#ba1a1a", label: "High risk" },
+};
+
+/**
+ * Semi-circular DTI gauge. The arc is a stroke-dash fraction of a half circle,
+ * so it animates from the same geometry the IVS gauge uses elsewhere.
+ */
+function DtiGauge({ percent, tier }: { percent: number | null; tier: SpendCredit["dtiTier"] }) {
+  const ARC = 251.2; // half-circumference of r=80, matching the profile gauge
+  // Anything at or above 60% pins the needle; beyond that the bar stops being
+  // informative and the tier label carries the message.
+  const filled = percent === null ? 0 : Math.min(percent, 60) / 60;
+  const style = DTI_TIER_STYLE[tier];
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative w-48 h-24">
+        <svg className="w-full h-full" viewBox="0 0 200 100" aria-hidden="true">
+          <path
+            className="stroke-surface-container-highest"
+            d="M20,90 A80,80 0 0,1 180,90"
+            fill="none"
+            strokeWidth="16"
+            strokeLinecap="round"
+          />
+          <path
+            d="M20,90 A80,80 0 0,1 180,90"
+            fill="none"
+            stroke={style.color}
+            strokeWidth="16"
+            strokeLinecap="round"
+            strokeDasharray={ARC}
+            strokeDashoffset={ARC - ARC * filled}
+            style={{ transition: "stroke-dashoffset 700ms ease" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">
+          <span className="text-headline-lg font-headline-lg" style={{ color: style.color }}>
+            {percent === null ? "—" : `${percent}%`}
+          </span>
+          <span className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest">
+            DTI Ratio
+          </span>
+        </div>
+      </div>
+      <span
+        className="mt-2 px-3 py-1 rounded-full text-label-sm font-bold"
+        style={{ backgroundColor: `${style.color}1a`, color: style.color }}
+      >
+        {style.label}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Spend & Credit Health — sits beside the IVS and answers the complementary
+ * question: how much of the verified income is already committed to debt.
+ */
+function SpendCreditWidget({
+  spend,
+  eligibility,
+  loading,
+}: {
+  spend: SpendCredit | null;
+  eligibility: Eligibility | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <section className="bg-surface-container-lowest p-8 rounded-[24px] shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+        <div className="animate-pulse space-y-4">
+          <div className="h-5 w-56 bg-surface-container-high rounded" />
+          <div className="h-24 bg-surface-container-high rounded-xl" />
+        </div>
+      </section>
+    );
+  }
+
+  // No card linked is a normal state, not an error — invite the action instead
+  // of rendering an empty gauge.
+  if (!spend || !spend.hasCards) {
+    return (
+      <section className="bg-surface-container-lowest p-8 rounded-[24px] shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex items-start gap-4">
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: `${PLATFORM_META.CREDIT_CARD.color}1a` }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ color: PLATFORM_META.CREDIT_CARD.color }}
+            >
+              credit_card
+            </span>
+          </div>
+          <div>
+            <h4 className="text-headline-sm font-headline-sm text-primary">
+              Spend &amp; Credit Health
+            </h4>
+            <p className="text-body-sm text-on-surface-variant max-w-lg mt-1">
+              Link a credit card to see your debt-to-income ratio, free cash flow
+              and pre-approved offers from partner banks.
+            </p>
+            {eligibility?.disclosure === "NOT_SHARED" ? (
+              <p className="text-body-sm text-error mt-2 font-medium">
+                Debt disclosure is currently withheld, so lenders can only offer
+                you the entry tier
+                {eligibility.tierIfDisclosed
+                  ? ` — sharing it could unlock ${eligibility.tierIfDisclosed}.`
+                  : "."}
+              </p>
+            ) : (
+              <p className="text-body-sm text-on-surface-variant mt-2">
+                Banks weigh undisclosed obligations as risk. Sharing a clean
+                debt position typically raises your approved limit.
+              </p>
+            )}
+          </div>
+        </div>
+        <Link href="/connect" className="flex-shrink-0">
+          <button className="px-6 py-3 bg-primary text-on-primary rounded-xl font-bold flex items-center gap-2 hover:shadow-lg transition-all">
+            Link a card
+            <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+          </button>
+        </Link>
+      </section>
+    );
+  }
+
+  const negative = spend.netFreeCashFlowPKR < 0;
+  const offered = spend.recommendedCreditLimitPKR > 0;
+
+  return (
+    <section className="bg-surface-container-lowest p-8 rounded-[24px] shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
+        <div>
+          <h4 className="text-headline-sm font-headline-sm text-primary">
+            Spend &amp; Credit Health
+          </h4>
+          <p className="text-body-sm text-on-surface-variant">
+            Across {spend.cardCount} linked card{spend.cardCount === 1 ? "" : "s"} ·
+            measured against verified income
+          </p>
+          {eligibility && (
+            <p className="text-label-sm mt-2 inline-flex items-center gap-1.5 font-bold">
+              <span
+                className="material-symbols-outlined text-[16px]"
+                style={{ color: eligibility.capped ? "#ba1a1a" : "#003127" }}
+              >
+                {eligibility.capped ? "trending_down" : "verified"}
+              </span>
+              <span style={{ color: eligibility.capped ? "#ba1a1a" : "#003127" }}>
+                Lending tier: {eligibility.tier}
+                {eligibility.capped ? ` (reduced from ${eligibility.baseTier})` : ""}
+              </span>
+            </p>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[spend.badges.utilization, spend.badges.repayment, spend.badges.dti].map((b) => (
+            <span
+              key={b.label}
+              title={b.detail}
+              className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-label-sm font-bold ${
+                b.status === "HEALTHY"
+                  ? "bg-[#E8F5E9] text-primary"
+                  : b.status === "WATCH"
+                    ? "bg-tertiary-container/25 text-on-tertiary-container"
+                    : b.status === "AT_RISK"
+                      ? "bg-error-container/40 text-on-error-container"
+                      : "bg-surface-container-high text-on-surface-variant"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[14px]">
+                {b.status === "HEALTHY"
+                  ? "check_circle"
+                  : b.status === "WATCH"
+                    ? "warning"
+                    : b.status === "AT_RISK"
+                      ? "error"
+                      : "help"}
+              </span>
+              {b.label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+        {/* Net free cash flow */}
+        <div className="space-y-4">
+          <div>
+            <p className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider mb-1">
+              Net Free Cash Flow
+            </p>
+            <h3
+              className="text-headline-lg font-headline-lg"
+              style={{ color: negative ? "#ba1a1a" : "#003127" }}
+            >
+              {PKR(spend.netFreeCashFlowPKR)}
+            </h3>
+            <p className="text-label-sm text-on-surface-variant mt-1">
+              per month, after card obligations
+            </p>
+          </div>
+          <div className="space-y-2 pt-4 border-t border-outline-variant/20">
+            <div className="flex justify-between text-label-sm">
+              <span className="text-on-surface-variant">Verified income</span>
+              <span className="font-bold">{PKR(spend.verifiedMonthlyIncomePKR)}</span>
+            </div>
+            <div className="flex justify-between text-label-sm">
+              <span className="text-on-surface-variant">Card obligations</span>
+              <span className="font-bold">−{PKR(spend.totalMonthlyObligationPKR)}</span>
+            </div>
+            <div className="flex justify-between text-label-sm">
+              <span className="text-on-surface-variant">Utilisation</span>
+              <span className="font-bold">
+                {spend.utilizationPercent === null ? "—" : `${spend.utilizationPercent}%`}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* DTI gauge */}
+        <div className="flex justify-center">
+          <DtiGauge percent={spend.dtiPercent} tier={spend.dtiTier} />
+        </div>
+
+        {/* Pre-approved offer */}
+        <div
+          className={`rounded-[24px] p-6 relative overflow-hidden ${
+            offered
+              ? "bg-primary-container text-on-primary"
+              : "bg-surface-container border border-outline-variant/30"
+          }`}
+        >
+          {offered ? (
+            <>
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className="material-symbols-outlined text-[18px]"
+                    style={{ color: "#D4AF37" }}
+                  >
+                    verified
+                  </span>
+                  <span className="text-label-sm font-bold uppercase tracking-widest">
+                    Pre-Approved
+                  </span>
+                </div>
+                <p className="text-headline-md font-headline-md mb-1">
+                  {PKR(spend.recommendedCreditLimitPKR)}
+                </p>
+                <p className="text-body-sm opacity-90">
+                  {eligibility ? `${eligibility.tier} tier · ` : ""}based on{" "}
+                  {PKR(spend.netFreeCashFlowPKR)} monthly free cash flow.
+                </p>
+                {eligibility?.capped && eligibility.capReason && (
+                  <p className="text-body-sm mt-2 px-3 py-2 rounded-lg bg-on-primary-container/15">
+                    {eligibility.capReason}
+                  </p>
+                )}
+                <Link href="/consent/setup">
+                  <button className="mt-4 w-full py-2.5 bg-on-primary-container/15 hover:bg-on-primary-container/25 rounded-lg font-bold text-label-md transition-colors flex items-center justify-center gap-2">
+                    Share &amp; apply
+                    <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
+                  </button>
+                </Link>
+              </div>
+              <div className="absolute -bottom-5 -right-4 opacity-15 pointer-events-none">
+                <span className="material-symbols-outlined text-[90px]">credit_score</span>
+              </div>
+            </>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2 mb-2 text-on-surface-variant">
+                <span className="material-symbols-outlined text-[18px]">info</span>
+                <span className="text-label-sm font-bold uppercase tracking-widest">
+                  No offer yet
+                </span>
+              </div>
+              <p className="text-body-sm text-on-surface-variant">
+                {eligibility?.disclosure === "NOT_SHARED"
+                  ? "Debt disclosure is withheld from lenders, so only the entry tier is available regardless of your income score."
+                  : negative
+                    ? "Your card obligations currently exceed verified income, so no limit is recommended. Reducing utilisation will unlock an offer."
+                    : "Connect more income sources to establish free cash flow and unlock a pre-approved limit."}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p className="text-[11px] text-on-surface-variant italic mt-6">
+        Indicative only. Banks see aggregated ratios and badges — never your card
+        number or individual transactions. Final approval remains with the lender.
+      </p>
+    </section>
+  );
+}
+
 export default function Page() {
   const [loading, setLoading] = useState(true);
-  const [summary, setSummary] = useState<any>(null);
-  const [reliability, setReliability] = useState<any>(null);
-  const [consent, setConsent] = useState<any>(null);
+  const [summary, setSummary] = useState<SummaryResponse | null>(null);
+  const [reliability, setReliability] = useState<ReliabilityResponse | null>(null);
+  const [consent, setConsent] = useState<Consent | null>(null);
   const { photoURL } = useCurrentUser();
 
   useEffect(() => {
@@ -45,74 +396,32 @@ export default function Page() {
     loadData();
   }, []);
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
-    }
-  };
-
   const monthlyAggregates = summary?.monthlyAggregates || [];
-  const maxTotal = Math.max(...monthlyAggregates.map((m: any) => m.totalPKR), 1);
-  const connectedSourcesCount = summary?.connectedSources?.filter((s: any) => s.status === "CONNECTED").length || 0;
+  const maxTotal = Math.max(...monthlyAggregates.map((m) => m.totalPKR), 1);
+  const connectedSourcesCount = summary?.connectedSources?.filter((s) => s.status === "CONNECTED").length || 0;
 
   // Only chart/legend the platforms this freelancer actually earned through,
   // so the legend doesn't list six providers for someone using two.
-  const activePlatforms = PLATFORMS.filter((p) =>
-    monthlyAggregates.some((m: any) => (m.byPlatform?.[p] || 0) > 0)
+  const activePlatforms = INCOME_PLATFORMS.filter((p) =>
+    monthlyAggregates.some((m) => (m.byPlatform?.[p] || 0) > 0)
   );
-  const sourceMix = summary?.sourceMix || {};
+  const sourceMix: Partial<Record<IncomePlatform, number>> = summary?.sourceMix || {};
+  // Prefer the reliability payload: its DTI is measured against the same income
+  // figure shown in this page's header, so the two can never disagree.
+  const spendCredit: SpendCredit | null =
+    reliability?.spendCredit || summary?.spendCredit || null;
+  const eligibility: Eligibility | null = reliability?.eligibility || null;
+
+  // Cumulative arc offsets for the source-mix doughnut, computed without
+  // mutating a running total during render.
+  const DONUT_CIRCUMFERENCE = 2 * Math.PI * 80;
+  const donutSegments = activePlatforms.map((platform, i) => {
+    const arc = ((sourceMix[platform] || 0) / 100) * DONUT_CIRCUMFERENCE;
+    const offset = activePlatforms
+      .slice(0, i)
+      .reduce((sum, p) => sum + ((sourceMix[p] || 0) / 100) * DONUT_CIRCUMFERENCE, 0);
+    return { platform, arc, rest: DONUT_CIRCUMFERENCE - arc, offset };
+  });
 
   return (
     <>
@@ -225,7 +534,7 @@ export default function Page() {
       <div className="h-full bg-tertiary-container" style={{ width: consent ? "100%" : "0%" }}></div>
       </div>
       <span className="text-label-sm font-label-sm">
-        {consent ? (consent.scopeDuration === "ROLLING_6MO" ? "6 mo. rolling" : "One-time") : "Not shared"}
+        {consent ? (consent.duration === "ROLLING_6MO" ? "6 mo. rolling" : "One-time") : "Not shared"}
       </span>
       </div>
       </div>
@@ -268,7 +577,7 @@ export default function Page() {
       </div>
       </div>
       <div className="h-64 flex items-end justify-between gap-4 group">
-      {monthlyAggregates.map((month: any, idx: number) => {
+      {monthlyAggregates.map((month, idx: number) => {
         const isCurrent = idx === 5;
         const total = month.totalPKR;
         const heightPercent = Math.max(10, Math.round((total / maxTotal) * 100));
@@ -281,7 +590,7 @@ export default function Page() {
               className="w-full flex flex-col-reverse gap-0.5"
               style={{ height: `${heightPercent}%` }}
             >
-              {PLATFORMS.map((platform, pIdx) => {
+              {INCOME_PLATFORMS.map((platform, pIdx) => {
                 const amount = byPlatform[platform] || 0;
                 if (amount <= 0) return null;
                 const meta = PLATFORM_META[platform];
@@ -316,29 +625,20 @@ export default function Page() {
       {/*  Custom SVG Doughnut  */}
       <svg className="w-48 h-48 transform -rotate-90">
       <circle cx="96" cy="96" fill="transparent" r="80" stroke="#ebeef3" strokeWidth="18"></circle>
-      {(() => {
-        const C = 2 * Math.PI * 80;
-        let offset = 0;
-        return activePlatforms.map((platform) => {
-          const arc = ((sourceMix[platform] || 0) / 100) * C;
-          const el = (
-            <circle
-              key={platform}
-              className="transition-all duration-1000"
-              cx="96"
-              cy="96"
-              fill="transparent"
-              r="80"
-              stroke={PLATFORM_META[platform].color}
-              strokeDasharray={`${arc} ${C - arc}`}
-              strokeDashoffset={-offset}
-              strokeWidth="18"
-            ></circle>
-          );
-          offset += arc;
-          return el;
-        });
-      })()}
+      {donutSegments.map((seg) => (
+        <circle
+          key={seg.platform}
+          className="transition-all duration-1000"
+          cx="96"
+          cy="96"
+          fill="transparent"
+          r="80"
+          stroke={PLATFORM_META[seg.platform].color}
+          strokeDasharray={`${seg.arc} ${seg.rest}`}
+          strokeDashoffset={-seg.offset}
+          strokeWidth="18"
+        ></circle>
+      ))}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
       <span className="text-headline-md font-headline-md">{connectedSourcesCount}</span>
@@ -364,6 +664,8 @@ export default function Page() {
       </div>
       </div>
       </section>
+      {/*  SpendSmart: Spend & Credit Health  */}
+      <SpendCreditWidget spend={spendCredit} eligibility={eligibility} loading={loading} />
       {/*  Activity & Ledger Section  */}
       <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/*  Activity Feed  */}
@@ -373,7 +675,7 @@ export default function Page() {
       <Link href="/profile" className="text-primary text-label-md font-bold hover:underline">View All</Link>
       </div>
       <div className="space-y-6">
-      {(summary?.recentTransactions || []).slice(0, 3).map((tx: any) => (
+      {(summary?.recentTransactions || []).slice(0, 3).map((tx) => (
         <div key={tx.id} className="flex gap-4">
           <div className="mt-1 w-10 h-10 rounded-full bg-primary-fixed flex items-center justify-center text-primary flex-shrink-0">
             <span className="material-symbols-outlined text-[20px]">

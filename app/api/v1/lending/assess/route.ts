@@ -1,10 +1,13 @@
 import { NextResponse, after } from "next/server";
-import { dbService, Consent } from "@/lib/db";
+import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
-import { computeIncomeScore } from "@/lib/scoring";
+import { computeIncomeScore, computeSpendCreditMetrics } from "@/lib/scoring";
+import { assessEligibility, resolveDisclosure, cappedOfferPKR } from "@/lib/eligibility";
+import type { ApplicantDetailResponse } from "@/lib/api_types";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { isRateLimited } from "@/lib/rate_limiter";
 import { logBankAccess as logBankAccessOnChain } from "@/lib/blockchain/client/consent-client";
+import { getErrorMessage } from "@/lib/errors";
 
 export async function GET(request: Request) {
   try {
@@ -66,6 +69,31 @@ export async function GET(request: Request) {
       // 3. Compute score metrics
       const scores = computeIncomeScore(consentedTransactions);
 
+      // 3b. Outflow / DTI. Cards are only ever read when CREDIT_CARD is in the
+      // consent — the bank sees the disclosure *status* either way, but the
+      // underlying figures only when they were actually shared.
+      const outflowConsented = consentedPlatforms.has("CREDIT_CARD");
+      const linkedCards = outflowConsented
+        ? (await dbService.listCreditCards(freelancerId)).filter((c) =>
+            allSources.some(
+              (s) => s.id === c.sourceId && s.status === "CONNECTED"
+            )
+          )
+        : [];
+      const spendCredit = outflowConsented
+        ? computeSpendCreditMetrics(linkedCards, scores.avgMonthlyIncome)
+        : null;
+
+      const disclosure = resolveDisclosure({
+        consentSources: activeConsent.sources,
+        hasLinkedCards: linkedCards.length > 0,
+      });
+      const eligibility = assessEligibility({
+        ivs: scores.ivs,
+        disclosure,
+        dtiTier: spendCredit?.dtiTier ?? null,
+      });
+
       // 4. Dual-write access logging (ledger + best-effort blockchain), scheduled
       // via `after()` so it never delays this response — dashboard load time
       // must not depend on ledger/blockchain write latency.
@@ -78,7 +106,13 @@ export async function GET(request: Request) {
           await appendLedgerEntry(activeConsent.id, "BANK_ACCESS", {
             bankId,
             accessedAt,
-            accessedFields: ["avgMonthlyIncome", "coefficientOfVariation", "trend", "ivs"],
+            accessedFields: [
+              "avgMonthlyIncome",
+              "coefficientOfVariation",
+              "trend",
+              "ivs",
+              ...(outflowConsented ? ["dtiPercent", "creditUtilization"] : []),
+            ],
           });
         } catch (ledgerError) {
           console.error("[BANK_ACCESS LEDGER WRITE FAILED]", { consentId: activeConsent.id, ledgerError });
@@ -96,15 +130,15 @@ export async function GET(request: Request) {
             blockchainStatus: "CONFIRMED",
             solanaTxSignature: onChain.signature,
           });
-        } catch (chainError: any) {
+        } catch (chainError) {
           console.error("[BLOCKCHAIN WRITE FAILED - log_bank_access]", {
             consentId: activeConsent.id,
-            error: chainError.message || chainError,
+            error: getErrorMessage(chainError),
           });
           try {
             await dbService.updateConsent(activeConsent.id, {
               blockchainStatus: "FAILED",
-              blockchainError: chainError.message || String(chainError),
+              blockchainError: getErrorMessage(chainError),
             });
           } catch (statusUpdateError) {
             console.error("[FAILED TO RECORD BLOCKCHAIN FAILURE STATUS]", {
@@ -131,7 +165,7 @@ export async function GET(request: Request) {
       });
 
       // 6. Data minimization response payload
-      const responsePayload: any = {
+      const responsePayload: ApplicantDetailResponse = {
         success: true,
         freelancerId,
         name: user?.name || "Freelancer",
@@ -149,8 +183,33 @@ export async function GET(request: Request) {
           trend: scores.trend,
           sourceDiversityScore: scores.sourceDiversityScore,
           ivs: scores.ivs,
-          eligibilityBandPKR: scores.eligibilityBandPKR,
+          // Indicative, income-only band. `eligibility` below is authoritative:
+          // it is the one that accounts for disclosure and debt.
+          indicativeIncomeOnlyBandPKR: scores.eligibilityBandPKR,
           breakdown: scores.breakdown,
+        },
+        // Authoritative decision surface for the lending team.
+        eligibility,
+        // Always present so a withheld disclosure reads as an explicit signal
+        // rather than a missing field.
+        outflowDisclosure: {
+          status: disclosure,
+          shared: outflowConsented,
+          metrics: spendCredit
+            ? {
+                dtiPercent: spendCredit.dtiPercent,
+                dtiTier: spendCredit.dtiTier,
+                utilizationPercent: spendCredit.utilizationPercent,
+                onTimeRepaymentPercent: spendCredit.onTimeRepaymentPercent,
+                netFreeCashFlowPKR: spendCredit.netFreeCashFlowPKR,
+                totalMonthlyObligationPKR: spendCredit.totalMonthlyObligationPKR,
+                cardCount: spendCredit.cardCount,
+                badges: spendCredit.badges,
+              }
+            : null,
+          recommendedOfferPKR: spendCredit
+            ? cappedOfferPKR(spendCredit.recommendedCreditLimitPKR, eligibility)
+            : 0,
         },
       };
 
@@ -173,6 +232,7 @@ export async function GET(request: Request) {
       let avgIncome = 0;
       let ivs = 0;
       let trend: "GROWING" | "STABLE" | "DECLINING" = "STABLE";
+      let eligibility = null as ReturnType<typeof assessEligibility> | null;
 
       // If active consent exists, compute summary stats
       if (activeConsent) {
@@ -191,6 +251,28 @@ export async function GET(request: Request) {
         avgIncome = scores.avgMonthlyIncome;
         ivs = scores.ivs;
         trend = scores.trend;
+
+        // Same gating as the detail view so the list cannot rank an applicant
+        // above the tier their disclosure actually supports.
+        const outflowConsented = consentedPlatforms.has("CREDIT_CARD");
+        const linkedCards = outflowConsented
+          ? (await dbService.listCreditCards(freelancer.id)).filter((c) =>
+              allSources.some(
+                (s) => s.id === c.sourceId && s.status === "CONNECTED"
+              )
+            )
+          : [];
+        const spend = outflowConsented
+          ? computeSpendCreditMetrics(linkedCards, scores.avgMonthlyIncome)
+          : null;
+        eligibility = assessEligibility({
+          ivs: scores.ivs,
+          disclosure: resolveDisclosure({
+            consentSources: activeConsent.sources,
+            hasLinkedCards: linkedCards.length > 0,
+          }),
+          dtiTier: spend?.dtiTier ?? null,
+        });
       }
 
       results.push({
@@ -204,6 +286,10 @@ export async function GET(request: Request) {
         avgMonthlyIncome: avgIncome,
         ivs,
         trend,
+        eligibilityTier: eligibility?.tier || null,
+        eligibilityLabel: eligibility?.label || null,
+        outflowDisclosure: eligibility?.disclosure || null,
+        eligibilityCapped: eligibility?.capped ?? false,
       });
     }
 
@@ -211,10 +297,10 @@ export async function GET(request: Request) {
       success: true,
       applicants: results,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Lending assess API endpoint error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

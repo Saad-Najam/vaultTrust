@@ -1,14 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import type { ReliabilityResponse } from "@/lib/api_types";
 
 export default function Page() {
-  const [reliability, setReliability] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [reliability, setReliability] = useState<ReliabilityResponse | null>(null);
 
   useEffect(() => {
     const fetchReliability = async () => {
@@ -20,70 +19,10 @@ export default function Page() {
         }
       } catch (err) {
         console.error(err);
-      } finally {
-        setLoading(false);
       }
     };
     fetchReliability();
   }, []);
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
-    }
-  };
 
   const ivs = reliability?.scores?.ivs || 0;
   const strokeDashoffset = 251.2 - (251.2 * ivs) / 100;
@@ -168,7 +107,7 @@ export default function Page() {
       <div>
       <p className="text-label-sm font-label-sm text-on-surface-variant">Consistency Rank</p>
       <h4 className="text-headline-sm font-headline-sm text-secondary mt-1">
-        {reliability?.scores?.consistency ? (reliability.scores.consistency * 100).toFixed(0) : "0"}% Stable
+        {reliability?.scores?.consistencyScore ?? 0}% Stable
       </h4>
       </div>
       <span className="material-symbols-outlined text-secondary bg-secondary/5 p-2 rounded-lg">rebase_edit</span>
@@ -194,7 +133,7 @@ export default function Page() {
       <div>
       <p className="text-label-sm font-label-sm text-on-surface-variant">Income Sources</p>
       <h4 className="text-headline-sm font-headline-sm text-on-primary-fixed-variant mt-1">
-        {reliability?.scores?.diversity ? `Score ${Math.round(reliability?.scores?.diversity * 100)}` : "High Diversity"}
+        {reliability?.scores?.diversityScore != null ? `Score ${reliability.scores.diversityScore}` : "High Diversity"}
       </h4>
       </div>
       <span className="material-symbols-outlined text-on-primary-fixed-variant bg-on-primary-container/10 p-2 rounded-lg">hub</span>

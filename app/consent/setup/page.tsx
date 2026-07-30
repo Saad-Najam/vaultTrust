@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
-import { PLATFORMS, PLATFORM_META, Platform } from "@/lib/platforms";
+import { PLATFORMS, INCOME_PLATFORMS, OUTFLOW_PLATFORMS, PLATFORM_META, Platform } from "@/lib/platforms";
 
 export default function Page() {
   const router = useRouter();
@@ -56,7 +55,7 @@ export default function Page() {
       // Even a network-level failure to reach our own API (not Solana) should
       // never silently disappear — surface it clearly rather than throwing
       // inside res.json() with no context.
-      let data: any;
+      let data: { success?: boolean; error?: string } | undefined;
       try {
         data = await res.json();
       } catch {
@@ -64,13 +63,13 @@ export default function Page() {
         return;
       }
 
-      if (data.success) {
+      if (data?.success) {
         // The ledger write is always guaranteed to have succeeded here —
         // blockchain confirmation is best-effort and never blocks this step,
         // so a pending/failed chain write is not a reason to alarm the user.
         router.push("/consent/active");
       } else {
-        setErrorMessage(data.error || "Failed to grant consent. Please try again.");
+        setErrorMessage(data?.error || "Failed to grant consent. Please try again.");
       }
     } catch (err) {
       console.error(err);
@@ -79,65 +78,6 @@ export default function Page() {
       );
     } finally {
       setLoading(false);
-    }
-  };
-
-  const [consentActive, setConsentActive] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
     }
   };
 
@@ -179,7 +119,7 @@ export default function Page() {
               {/*  Recipient Info Card  */}
               <div className="glass-card rounded-[24px] p-stack-md flex items-center gap-4 mb-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
               <div className="w-16 h-16 rounded-xl bg-surface-container-highest flex items-center justify-center overflow-hidden">
-              <img className="w-full h-full object-cover" data-alt="A professional corporate logo for a modern bank named UBL Digital, featuring minimalist geometric shapes in deep teal and white, presented on a clean studio background with soft directional lighting to emphasize reliability and security." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAQqB_0cQAhjZIpKKQI8HoLZiG8DgNeU0WxE53ORI_Mt3vblL8OryB9lNmXfqJ52Q8HAx1DfnM9I1C8TQy_bpcfQG6boOUkixHN_N_E7NGl9SVfmGJmzNBjsFzq1f4f5m0P2O24rEVi7ppKx4wdx5jikIiFhg5lGIwnFkxkEazUOf8L3btsQZXN2CPD-NLbOcJavrLTJFqluGKooU7aBouRy3aXMzX05KdavhNRqP6MHviQIJTDXubAA"/>
+              <img alt="UBL Digital logo" className="w-full h-full object-cover" data-alt="A professional corporate logo for a modern bank named UBL Digital, featuring minimalist geometric shapes in deep teal and white, presented on a clean studio background with soft directional lighting to emphasize reliability and security." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAQqB_0cQAhjZIpKKQI8HoLZiG8DgNeU0WxE53ORI_Mt3vblL8OryB9lNmXfqJ52Q8HAx1DfnM9I1C8TQy_bpcfQG6boOUkixHN_N_E7NGl9SVfmGJmzNBjsFzq1f4f5m0P2O24rEVi7ppKx4wdx5jikIiFhg5lGIwnFkxkEazUOf8L3btsQZXN2CPD-NLbOcJavrLTJFqluGKooU7aBouRy3aXMzX05KdavhNRqP6MHviQIJTDXubAA"/>
               </div>
               <div>
               <h3 className="text-headline-sm font-headline-sm text-primary">UBL Digital</h3>
@@ -289,7 +229,7 @@ export default function Page() {
               <div>
               <div className="flex items-center gap-3 mb-2">
               <div className="w-12 h-12 bg-surface-container rounded-xl flex items-center justify-center">
-              <img className="w-8 h-8 object-contain" data-alt="A minimalist logo for a digital bank called UBL Digital Lending. The logo features a stylized teal monogram inside a clean white square with rounded corners. The design is modern, professional, and incorporates institutional modernism elements with high contrast and sharp geometry." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8zp10xWYPlJEnd9_vhUtavGAD92_E9WGsrJ3Z1-STU_U0ASv8anbct4ldH-ELgGpIHHu1Sr7f2MUsZKxGAuzFL6Wg9RmThrHf29o4b3RE1y9IUgDVpwrggnGbbLDdegWv-rFYm31V1e32HOC6pKKsPUxZFag4y0uImHACI_oTyIGOCKvZqxFNrZisxZaMNIumnHTUeeSCA8Ywwghn2EdfntiV4UX9Rm4Fw6FDmvo06VeCibTb4Pfm-g"/>
+              <img alt="UBL Digital Lending logo" className="w-8 h-8 object-contain" data-alt="A minimalist logo for a digital bank called UBL Digital Lending. The logo features a stylized teal monogram inside a clean white square with rounded corners. The design is modern, professional, and incorporates institutional modernism elements with high contrast and sharp geometry." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8zp10xWYPlJEnd9_vhUtavGAD92_E9WGsrJ3Z1-STU_U0ASv8anbct4ldH-ELgGpIHHu1Sr7f2MUsZKxGAuzFL6Wg9RmThrHf29o4b3RE1y9IUgDVpwrggnGbbLDdegWv-rFYm31V1e32HOC6pKKsPUxZFag4y0uImHACI_oTyIGOCKvZqxFNrZisxZaMNIumnHTUeeSCA8Ywwghn2EdfntiV4UX9Rm4Fw6FDmvo06VeCibTb4Pfm-g"/>
               </div>
               <div>
               <p className="text-label-md font-label-md text-primary">Recipient: UBL Digital Lending</p>
@@ -308,12 +248,16 @@ export default function Page() {
               <div className="lg:col-span-7 space-y-6">
               {/*  Toggle Section  */}
               <div className="bg-surface-container-lowest rounded-[24px] p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-outline-variant/10">
-              <h3 className="text-headline-sm font-headline-sm mb-6 flex items-center gap-2">
+              <h3 className="text-headline-sm font-headline-sm mb-2 flex items-center gap-2">
               <span className="material-symbols-outlined text-primary">rule</span>
                                           Data Permissions
                                       </h3>
+              <p className="text-body-sm text-on-surface-variant mb-6">Income and spending are separate consents — you can prove earnings without disclosing debt.</p>
+
+              {/*  Income sources  */}
+              <p className="text-label-sm font-label-sm text-primary uppercase tracking-widest mb-4">Income sources</p>
               <div className="space-y-stack-lg">
-              {PLATFORMS.map((platform, idx) => (
+              {INCOME_PLATFORMS.map((platform, idx) => (
               <React.Fragment key={platform}>
               {idx > 0 && <hr className="border-outline-variant/30"/>}
               <div className="flex items-start justify-between group">
@@ -322,7 +266,7 @@ export default function Page() {
               <p className="text-body-sm font-body-sm text-on-surface-variant mt-1">Only aggregated monthly totals are shared, not raw transactions.</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-              <input checked={sources[platform]} onChange={() => handleToggle(platform)} className="sr-only permission-toggle" type="checkbox"/>
+              <input checked={sources[platform]} onChange={() => handleToggle(platform)} className="sr-only permission-toggle" type="checkbox" aria-label={`Share ${PLATFORM_META[platform].label} summary`}/>
               <div className={`w-11 h-6 rounded-full transition-colors relative ${sources[platform] ? 'bg-primary' : 'bg-surface-container-highest'}`}>
               <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${sources[platform] ? 'left-6' : 'left-1'}`}></div>
               </div>
@@ -330,6 +274,43 @@ export default function Page() {
               </div>
               </React.Fragment>
               ))}
+              </div>
+
+              {/*  Outflow / DTI — visually separated because the privacy
+                   trade-off is different: this reveals obligations, not earnings.  */}
+              <div className="mt-stack-lg pt-stack-lg border-t-2 border-dashed border-outline-variant/40">
+              <div className="flex items-center gap-2 mb-1">
+              <span className="material-symbols-outlined text-[18px]" style={{ color: PLATFORM_META.CREDIT_CARD.color }}>credit_card</span>
+              <p className="text-label-sm font-label-sm uppercase tracking-widest" style={{ color: PLATFORM_META.CREDIT_CARD.color }}>Spending &amp; credit (outflow)</p>
+              </div>
+              <p className="text-body-sm text-on-surface-variant mb-3">Sharing this can raise your approved limit, because the bank sees committed obligations rather than assuming them.</p>
+              {!sources.CREDIT_CARD && (
+                <div className="mb-4 p-3 rounded-xl bg-error/10 border border-error/20 flex items-start gap-2">
+                  <span className="material-symbols-outlined text-error text-[18px] mt-0.5">trending_down</span>
+                  <div>
+                    <p className="text-body-sm text-error font-bold">Entry tier only</p>
+                    <p className="text-body-sm text-on-surface-variant mt-0.5">
+                      With debt undisclosed, lenders cap you at micro-credit / BNPL no matter how strong your income score is, and see this as <span className="font-bold">Declined</span> rather than blank. Disclosing a clean position is what unlocks the higher bands.
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-stack-lg">
+              {OUTFLOW_PLATFORMS.map((platform) => (
+              <div key={platform} className="flex items-start justify-between group">
+              <div className="flex-grow pr-4">
+              <p className="text-body-md font-bold text-on-surface">Share debt-to-income &amp; utilisation</p>
+              <p className="text-body-sm font-body-sm text-on-surface-variant mt-1">Shares your DTI ratio, utilisation band and repayment badges. Never your card number, statements or individual purchases.</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+              <input checked={sources[platform]} onChange={() => handleToggle(platform)} className="sr-only permission-toggle" type="checkbox" aria-label="Share debt-to-income and utilisation metrics"/>
+              <div className={`w-11 h-6 rounded-full transition-colors relative ${sources[platform] ? '' : 'bg-surface-container-highest'}`} style={sources[platform] ? { backgroundColor: PLATFORM_META.CREDIT_CARD.color } : undefined}>
+              <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${sources[platform] ? 'left-6' : 'left-1'}`}></div>
+              </div>
+              </label>
+              </div>
+              ))}
+              </div>
               </div>
               </div>
               {/*  Duration Selection  */}

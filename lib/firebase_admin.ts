@@ -1,6 +1,7 @@
 import { initializeApp, getApps, cert, App } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
+import { getErrorMessage } from "./errors";
 
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -38,8 +39,8 @@ export function getFirebaseAdmin() {
           privateKey,
         }),
       });
-    } catch (error: any) {
-      throw new Error(`Failed to initialize Firebase Admin SDK: ${error.message || error}`);
+    } catch (error) {
+      throw new Error(`Failed to initialize Firebase Admin SDK: ${getErrorMessage(error)}`);
     }
   } else {
     adminApp = existingApps[0];

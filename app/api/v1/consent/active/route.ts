@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
+import { getErrorMessage } from "@/lib/errors";
 
 export async function GET(request: Request) {
   try {
@@ -19,10 +20,10 @@ export async function GET(request: Request) {
       success: true,
       consent: activeConsent,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Active consent API endpoint error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

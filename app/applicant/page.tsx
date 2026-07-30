@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { doc, onSnapshot } from "firebase/firestore";
 import BankSidebar from "@/components/BankSidebar";
 import ExplainabilityCard from "@/components/ExplainabilityCard";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { db } from "@/lib/firebase";
+import type { ApplicantDetailResponse, Consent, VerificationResponse, VerifiedLedgerEntry } from "@/lib/api_types";
 
 // First 6 + last 4 characters, per the standard Explorer-link truncation format.
 function truncateSignature(sig: string | null | undefined): string {
@@ -26,24 +28,17 @@ const EVENT_LABELS: Record<string, string> = {
   BANK_ACCESS: "Bank Accessed Data",
 };
 
-export default function Page() {
-  const [freelancerId, setFreelancerId] = useState<string | null>(null);
-  const [applicant, setApplicant] = useState<any>(null);
+function ApplicantDetail() {
+  // Derived from the URL rather than mirrored into state via an effect.
+  const freelancerId = useSearchParams().get("freelancerId");
+  const [applicant, setApplicant] = useState<ApplicantDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [verification, setVerification] = useState<any>(null);
-  const [auditTrail, setAuditTrail] = useState<any[]>([]);
+  const [verification, setVerification] = useState<VerificationResponse | null>(null);
+  const [auditTrail, setAuditTrail] = useState<VerifiedLedgerEntry[]>([]);
   // Read-only mirror of what app/api/v1/consent/revoke/route.ts has already
   // written to Firestore — this listener never writes anything itself.
-  const [liveConsent, setLiveConsent] = useState<any>(null);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const id = urlParams.get("freelancerId");
-      setFreelancerId(id);
-    }
-  }, []);
+  const [liveConsent, setLiveConsent] = useState<Consent | null>(null);
 
   useEffect(() => {
     if (!freelancerId) return;
@@ -70,7 +65,8 @@ export default function Page() {
               if (auditData.success) {
                 setAuditTrail(
                   [...auditData.entries].sort(
-                    (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+                    (a: VerifiedLedgerEntry, b: VerifiedLedgerEntry) =>
+                      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
                   )
                 );
               }
@@ -102,7 +98,7 @@ export default function Page() {
       doc(db, "consents", consentId),
       (snap) => {
         if (snap.exists()) {
-          setLiveConsent(snap.data());
+          setLiveConsent(snap.data() as Consent);
         }
       },
       (err) => {
@@ -113,64 +109,6 @@ export default function Page() {
   }, [consentId]);
 
   const isLiveRevoked = liveConsent?.status === "REVOKED";
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
-    }
-  };
 
   if (loading) {
     return (
@@ -205,7 +143,7 @@ export default function Page() {
       <span className="material-symbols-outlined text-on-surface-variant">verified</span>
       </button>
       <div className="h-8 w-8 rounded-full overflow-hidden border border-outline-variant">
-      <img className="w-full h-full object-cover" data-alt="A professional headshot of a financial services administrator in a corporate setting, looking confident and reliable. The lighting is soft and neutral, reflecting a corporate institutional modernist aesthetic with a palette of deep greens and crisp whites." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB50jon0UWjgDgx0E2K2JWoo20_ijw4iRThZ-WS-cEQiYcA7kIFrdWk7dDTnpy8O0bXSEjkKDpmpQ4nb-3JgID-BEE7OQ3ACRpVoSkIoHozrv3HYN40kmCP-6MXr3mDSwYjxNNbZ1mLjfTK6U8Vy2DHR2TNw25WLhhWZn0tscy4OsMQCudVbOmG6ahuMFBBkz-bHFgHcNQHoDeuFn0aweMOttsPzCPGiX_byFk6A-0XYekGP8YJMB_S1g"/>
+      <img alt="" className="w-full h-full object-cover" data-alt="A professional headshot of a financial services administrator in a corporate setting, looking confident and reliable. The lighting is soft and neutral, reflecting a corporate institutional modernist aesthetic with a palette of deep greens and crisp whites." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB50jon0UWjgDgx0E2K2JWoo20_ijw4iRThZ-WS-cEQiYcA7kIFrdWk7dDTnpy8O0bXSEjkKDpmpQ4nb-3JgID-BEE7OQ3ACRpVoSkIoHozrv3HYN40kmCP-6MXr3mDSwYjxNNbZ1mLjfTK6U8Vy2DHR2TNw25WLhhWZn0tscy4OsMQCudVbOmG6ahuMFBBkz-bHFgHcNQHoDeuFn0aweMOttsPzCPGiX_byFk6A-0XYekGP8YJMB_S1g"/>
       </div>
       </div>
       </header>
@@ -241,7 +179,7 @@ export default function Page() {
                 <h1 className="text-headline-lg font-headline-lg text-on-surface">{applicant.name}</h1>
                 <span className="px-3 py-1 bg-[#E8F5E9] text-[#004A3B] rounded-full text-label-sm font-label-sm flex items-center gap-1">
                   <span className="material-symbols-outlined text-sm" style={{"fontVariationSettings":"'FILL' 1"}}>check_circle</span>
-                  Active consent: {applicant.consentInfo?.scopeDuration === "ROLLING_6MO" ? "6 Months Rolling" : "One-time snapshot"}
+                  Active consent: {applicant.consentInfo?.duration === "ROLLING_6MO" ? "6 Months Rolling" : "One-time snapshot"}
                 </span>
               </div>
               <p className="text-body-lg text-on-surface-variant">Verified Freelancer Profile (City: {applicant.city})</p>
@@ -351,9 +289,65 @@ export default function Page() {
                     <span className="material-symbols-outlined text-white/50">account_balance_wallet</span>
                   </div>
                   <p className="text-white/70 text-label-md mb-1">Max Credit Band Eligibility</p>
-                  <h3 className="text-headline-md font-headline-md mb-4">
-                    PKR {Math.round(applicant.incomeProfile?.eligibilityBandPKR).toLocaleString()}
+                  <h3 className="text-headline-md font-headline-md mb-1">
+                    PKR {Math.round(applicant.eligibility?.maxLimitPKR || 0).toLocaleString()}
                   </h3>
+                  <p className="text-white/70 text-label-sm mb-4">
+                    {applicant.eligibility?.label || "Not assessed"}
+                  </p>
+
+                  {/*  Debt disclosure is shown as an explicit state. A blank
+                       field reads as neutral; "Declined" reads as the risk
+                       signal it actually is.  */}
+                  {(() => {
+                    const d = applicant.outflowDisclosure?.status;
+                    const cfg =
+                      d === "SHARED"
+                        ? { icon: "verified", text: "Debt disclosed & statement-backed", tone: "bg-white/20" }
+                        : d === "DECLARED_NONE"
+                          ? { icon: "info", text: "No debt — self-declared, verify via eCIB", tone: "bg-[#D4AF37]/30" }
+                          : { icon: "warning", text: "Debt disclosure DECLINED", tone: "bg-[#ba1a1a]/40" };
+                    return (
+                      <div className={`flex items-start gap-2 px-3 py-2 rounded-lg mb-3 ${cfg.tone}`}>
+                        <span className="material-symbols-outlined text-[18px] mt-0.5">{cfg.icon}</span>
+                        <div>
+                          <p className="text-label-sm font-bold">{cfg.text}</p>
+                          {applicant.eligibility?.capped && applicant.eligibility?.capReason && (
+                            <p className="text-[11px] text-white/80 mt-0.5">
+                              {applicant.eligibility.capReason}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {applicant.outflowDisclosure?.metrics && (
+                    <div className="space-y-1.5 mb-4 pt-3 border-t border-white/20">
+                      <div className="flex justify-between text-label-sm">
+                        <span className="text-white/70">Debt-to-income</span>
+                        <span className="font-bold">
+                          {applicant.outflowDisclosure.metrics.dtiPercent ?? "—"}
+                          {applicant.outflowDisclosure.metrics.dtiPercent !== null ? "%" : ""}
+                          {" "}({applicant.outflowDisclosure.metrics.dtiTier})
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-label-sm">
+                        <span className="text-white/70">Utilisation</span>
+                        <span className="font-bold">
+                          {applicant.outflowDisclosure.metrics.utilizationPercent ?? "—"}
+                          {applicant.outflowDisclosure.metrics.utilizationPercent !== null ? "%" : ""}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-label-sm">
+                        <span className="text-white/70">Free cash flow</span>
+                        <span className="font-bold">
+                          PKR {Math.round(applicant.outflowDisclosure.metrics.netFreeCashFlowPKR || 0).toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                   <button className="w-full py-3 bg-white text-primary rounded-xl font-bold text-label-md hover:bg-opacity-90 transition-all flex items-center justify-center gap-2">
                     Approve Loan Offer
                     <span className="material-symbols-outlined text-sm">arrow_forward</span>
@@ -395,7 +389,7 @@ export default function Page() {
                       </p>
                       <p className="text-label-sm text-on-surface-variant">
                         {verification
-                          ? `Local ledger: ${verification.localLedger.entryCount} entries, ${verification.localLedger.intact ? "intact" : "BROKEN"}`
+                          ? `Local ledger: ${verification.localLedger?.entryCount} entries, ${verification.localLedger?.intact ? "intact" : "BROKEN"}`
                           : "Checking ledger integrity..."}
                       </p>
                     </div>
@@ -460,7 +454,7 @@ export default function Page() {
                               <p className="text-label-sm text-on-surface-variant">
                                 {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : "Unknown time"}
                               </p>
-                              {showSignature && (
+                              {showSignature && verification.transactionSignature && (
                                 <a
                                   href={explorerTxUrl(verification.transactionSignature)}
                                   target="_blank"
@@ -491,7 +485,7 @@ export default function Page() {
           <div className="bg-surface-container-low p-stack-md rounded-xl border border-outline-variant/30 flex items-start gap-3">
             <span className="material-symbols-outlined text-outline text-xl">lock</span>
             <p className="text-label-sm text-on-surface-variant">
-              Individual transaction details are encrypted and hidden as per user's data sharing preferences. Only aggregate metadata is visible for credit assessment.
+              Individual transaction details are encrypted and hidden as per user&apos;s data sharing preferences. Only aggregate metadata is visible for credit assessment.
             </p>
           </div>
 
@@ -536,7 +530,15 @@ export default function Page() {
 
             {/*  Score Explainability — real breakdown from computeIncomeScore(), not mock content  */}
             {applicant.incomeProfile?.breakdown && (
-              <ExplainabilityCard score={applicant.incomeProfile} />
+              <ExplainabilityCard
+                score={{
+                  ivs: applicant.incomeProfile.ivs,
+                  trend: applicant.incomeProfile.trend,
+                  breakdown: applicant.incomeProfile.breakdown,
+                  eligibilityBandPKR:
+                    applicant.incomeProfile.indicativeIncomeOnlyBandPKR,
+                }}
+              />
             )}
           </div>
         </div>
@@ -575,5 +577,25 @@ export default function Page() {
         <span className="material-symbols-outlined">chat_bubble</span>
       </button>
     </>
+  );
+}
+
+/**
+ * `useSearchParams()` opts the subtree into client-side rendering and must be
+ * wrapped in Suspense, otherwise the static prerender of /applicant fails.
+ */
+export default function Page() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-screen items-center justify-center bg-surface">
+          <div className="animate-pulse text-on-surface-variant text-body-md">
+            Loading applicant…
+          </div>
+        </div>
+      }
+    >
+      <ApplicantDetail />
+    </Suspense>
   );
 }

@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { seedSandboxSourcesForUser } from "@/lib/seed";
-import { PLATFORMS } from "@/lib/platforms";
+import { INCOME_PLATFORMS } from "@/lib/platforms";
 import { z } from "zod";
+import { getErrorMessage } from "@/lib/errors";
 
 const seedSchema = z.object({
-  platforms: z.array(z.enum(PLATFORMS)).min(1).optional(),
+  platforms: z.array(z.enum(INCOME_PLATFORMS)).min(1).optional(),
 });
 
 /**
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
       );
     }
 
-    let platforms = [...PLATFORMS] as (typeof PLATFORMS)[number][];
+    let platforms = [...INCOME_PLATFORMS] as (typeof INCOME_PLATFORMS)[number][];
     try {
       const body = await request.json();
       const validated = seedSchema.parse(body ?? {});
@@ -69,7 +70,7 @@ export async function POST(request: Request) {
       ...result,
       message: `Seeded ${result.sources} sandbox source(s) with ${result.transactions} transactions.`,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("[Dev SeedMe POST] Error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
       );
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

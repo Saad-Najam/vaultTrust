@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,12 +16,6 @@ const navItems = [
 export default function FreelancerSidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-
-  // Navigating from the mobile drawer should dismiss it, otherwise the panel
-  // stays over the page the user just asked for.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
 
   return (
     <>
@@ -60,7 +54,7 @@ export default function FreelancerSidebar() {
 
         {/* Logo */}
         <div className="px-6 mb-8">
-          <Link href="/" className="block">
+          <Link href="/" className="block" onClick={() => setOpen(false)}>
             <h1 className="text-headline-sm font-bold text-[#95d3bf]">VaultTrust</h1>
             <p className="text-label-sm text-white/40 mt-0.5">Freelancer Portal</p>
           </Link>
@@ -78,6 +72,7 @@ export default function FreelancerSidebar() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    onClick={() => setOpen(false)}
                     className={`flex items-center px-6 py-3 transition-colors ${
                       isActive
                         ? "text-[#95d3bf] font-bold border-r-4 border-[#95d3bf] bg-white/5"
@@ -99,6 +94,7 @@ export default function FreelancerSidebar() {
         <div className="px-6 mt-auto pt-6 border-t border-white/10">
           <Link
             href="/consent/active"
+            onClick={() => setOpen(false)}
             className="w-full bg-[#95d3bf] text-[#0d1f1a] py-3 px-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all text-label-md"
           >
             <span className="material-symbols-outlined text-[18px]">verified</span>

@@ -1,17 +1,20 @@
+/** Provider-specific document bundle; opaque to the mock verifier. */
+export type KycDocuments = Record<string, unknown>;
+
 export interface KycVerificationResult {
   status: "SIMULATED_PASS" | "VERIFIED" | "FAILED";
   providerRef: string;
 }
 
 export interface KycProvider {
-  verify(uid: string, documents: any): Promise<KycVerificationResult>;
+  verify(uid: string, documents: KycDocuments): Promise<KycVerificationResult>;
 }
 
 /**
  * Sandbox KYC Provider simulating a passing check with a short delay.
  */
 export class SandboxKycProvider implements KycProvider {
-  async verify(uid: string, documents: any): Promise<KycVerificationResult> {
+  async verify(_uid: string, _documents: KycDocuments): Promise<KycVerificationResult> {
     // Artificial delay to simulate real asynchronous OCR processing
     await new Promise((resolve) => setTimeout(resolve, 1500));
     return {
@@ -32,7 +35,7 @@ export class LiveKycProvider implements KycProvider {
     );
   }
 
-  async verify(uid: string, documents: any): Promise<KycVerificationResult> {
+  async verify(_uid: string, _documents: KycDocuments): Promise<KycVerificationResult> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Onfido KYC Provider API credentials (ONFIDO_API_KEY) are missing in environment.");
     }

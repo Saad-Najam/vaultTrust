@@ -1,3 +1,4 @@
+import { getErrorMessage } from "@/lib/errors";
 // Classifies failures from Solana RPC calls so callers can decide what's
 // retryable, what's user-facing-safe to retry automatically, and what needs
 // a clear operator-facing message. The local ledger is always the source of
@@ -24,12 +25,10 @@ export class BlockchainError extends Error {
   }
 }
 
-const RETRYABLE_CODES: BlockchainErrorCode[] = ["RPC_TIMEOUT", "RPC_UNAVAILABLE", "CONFIRMATION_TIMEOUT"];
-
 export function classifyBlockchainError(err: unknown): BlockchainError {
   if (err instanceof BlockchainError) return err;
 
-  const message = err instanceof Error ? err.message : String(err);
+  const message = getErrorMessage(err);
   const lower = message.toLowerCase();
 
   if (lower.includes("timed out") || lower.includes("timeout")) {

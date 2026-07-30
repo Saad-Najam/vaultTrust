@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { useCurrentUser } from "@/lib/use_current_user";
@@ -28,65 +27,6 @@ export default function Page() {
       alert("Error initiating KYC onboarding.");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const [consentActive, setConsentActive] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
     }
   };
 
@@ -156,7 +96,7 @@ export default function Page() {
       <div className="relative z-10">
       <div className="flex items-center gap-4 mb-stack-md">
       <div className="w-16 h-16 rounded-full border-2 border-primary-fixed overflow-hidden">
-      <img className="w-full h-full object-cover" data-alt="A professional headshot of a young South Asian man with short dark hair and a friendly smile, dressed in a smart casual navy blazer, against a clean studio background with soft cinematic lighting, evoking a sense of trust and professionalism for a financial portal." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdEfBnaUvlNQ_MZtj4n6_-qkLXgzMJFFU5Oeu-swiLPSHr9E0Twih3bdW78wh8CMN8Z1d6HUG08eEt_zbosw5Nm3-w5ZeEMoE94KX3QP_nOynehpY2GSfz6qNFbYogXcROni0mo40Z4P7ej3_ADuOtva_pDa1T93cRn8qwi8B0KEDvGYe8iTQzHXsKBAUBQhk947c7QVQrNGYmIuf4AnQoSMbsJmApfIsWC0eb7A1S8ZnrcFKIdjQ2_A"/>
+      <img alt="" className="w-full h-full object-cover" data-alt="A professional headshot of a young South Asian man with short dark hair and a friendly smile, dressed in a smart casual navy blazer, against a clean studio background with soft cinematic lighting, evoking a sense of trust and professionalism for a financial portal." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdEfBnaUvlNQ_MZtj4n6_-qkLXgzMJFFU5Oeu-swiLPSHr9E0Twih3bdW78wh8CMN8Z1d6HUG08eEt_zbosw5Nm3-w5ZeEMoE94KX3QP_nOynehpY2GSfz6qNFbYogXcROni0mo40Z4P7ej3_ADuOtva_pDa1T93cRn8qwi8B0KEDvGYe8iTQzHXsKBAUBQhk947c7QVQrNGYmIuf4AnQoSMbsJmApfIsWC0eb7A1S8ZnrcFKIdjQ2_A"/>
       </div>
       <div>
       <h1 className="text-headline-md font-headline-md text-primary">Welcome{name ? `, ${name}` : ""}</h1>
@@ -164,7 +104,7 @@ export default function Page() {
       </div>
       </div>
       <p className="text-body-lg font-body-lg text-on-surface max-w-lg leading-relaxed mt-4">
-                                  You're one step away from unlocking institutional-grade financial tools. By verifying your identity, you ensure the integrity of your digital vault and enable secure cross-border payments.
+                                  You&apos;re one step away from unlocking institutional-grade financial tools. By verifying your identity, you ensure the integrity of your digital vault and enable secure cross-border payments.
                               </p>
       </div>
       <div className="mt-stack-lg relative z-10">

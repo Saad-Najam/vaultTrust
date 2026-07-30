@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { dbService } from "@/lib/db";
+import { ConsentLedgerEntry, dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { verifyLedgerChain } from "@/lib/ledger";
+import { getErrorMessage } from "@/lib/errors";
 
 export async function GET(request: Request) {
   try {
@@ -20,7 +21,7 @@ export async function GET(request: Request) {
 
     // Group entries by consentId and verify each chain
     const consentIds = Array.from(new Set(entries.map((e) => e.consentId)));
-    const verifiedEntries: any[] = [];
+    const verifiedEntries: (ConsentLedgerEntry & { verified: boolean; reason?: string })[] = [];
     let isChainIntact = true;
 
     for (const cid of consentIds) {
@@ -51,10 +52,10 @@ export async function GET(request: Request) {
       ledger: verifiedEntries,
       isChainIntact,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Audit ledger API endpoint error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

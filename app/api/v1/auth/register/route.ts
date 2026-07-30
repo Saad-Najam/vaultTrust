@@ -3,6 +3,7 @@ import { dbService } from "@/lib/db";
 import { getAdminAuth } from "@/lib/firebase_admin";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { z } from "zod";
+import { getErrorMessage } from "@/lib/errors";
 
 const registerSchema = z.object({
   name: z.string().min(2),
@@ -60,13 +61,13 @@ export async function POST(request: Request) {
       success: true,
       message: "User registration successfully completed.",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Register endpoint error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json({ success: false, error: error.issues }, { status: 400 });
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

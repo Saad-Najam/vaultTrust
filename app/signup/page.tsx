@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -62,9 +63,9 @@ export default function SignupPage() {
       } else {
         router.push("/connect");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Signup flow error:", err);
-      setError(err.message || "An unexpected error occurred during signup.");
+      setError(getErrorMessage(err, "An unexpected error occurred during signup."));
       
       // Clean up user if server registration failed
       if (auth.currentUser) {

@@ -5,10 +5,11 @@ import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import { formatConsentExpiry } from "@/lib/consent_display";
+import type { Consent } from "@/lib/api_types";
 
 export default function Page() {
-  const [loading, setLoading] = useState(true);
-  const [consent, setConsent] = useState<any>(null);
+  const [consent, setConsent] = useState<Consent | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
 
@@ -22,8 +23,6 @@ export default function Page() {
         }
       } catch (err) {
         console.error(err);
-      } finally {
-        setLoading(false);
       }
     };
     fetchActiveConsent();
@@ -54,64 +53,6 @@ export default function Page() {
       setRevokeError("Could not reach the server. Check your connection and try again.");
     } finally {
       setRevoking(false);
-    }
-  };
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
     }
   };
 
@@ -182,14 +123,14 @@ export default function Page() {
           <div className="md:col-span-1 bg-surface-container-lowest p-6 rounded-card shadow-sm border border-outline-variant/30 flex flex-col items-start justify-between">
           <span className="text-label-sm font-label-sm text-on-surface-variant mb-2">Valid Until</span>
           <span className="text-headline-sm font-headline-sm text-secondary">
-            {consent.expiresAt ? new Date(consent.expiresAt).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"}) : "N/A"}
+            {formatConsentExpiry(consent)}
           </span>
           </div>
           {/*  Recipient  */}
           <div className="md:col-span-4 bg-primary-container/5 p-8 rounded-card border border-primary/10 flex items-center justify-between">
           <div className="flex items-center gap-4">
           <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center shadow-sm overflow-hidden">
-          <img className="w-8 h-8 object-contain" data-alt="A minimalist logo for UBL Bank, featuring professional geometric letterforms in deep emerald green and restrained gold. The logo is centered on a clean white background, conveying trust, legacy, and digital-first banking reliability." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtTNDoKPR7whO0U49HcD2m43kSTdLYRsbN4Peu6JI_pdfi6mvhoETUkM2AQGrJb0s_6jBuieu3hwk1K_Yd88jGaOQbrxbIGa7kRLluTb3EzY2bm23LIQNUlPa659hbt6FzbuPYFhqNoaU21hI9CASY3jGhUbKKc8hF6PIGyqcak8-gg6H8tvrnbVtMaW2GqcOXgoIn_yCH2H2D6plF3KBlu0NG4aW8QpFWkO2Zd0O3Oudjg3nPLIgJyA"/>
+          <img alt="UBL Bank logo" className="w-8 h-8 object-contain" data-alt="A minimalist logo for UBL Bank, featuring professional geometric letterforms in deep emerald green and restrained gold. The logo is centered on a clean white background, conveying trust, legacy, and digital-first banking reliability." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtTNDoKPR7whO0U49HcD2m43kSTdLYRsbN4Peu6JI_pdfi6mvhoETUkM2AQGrJb0s_6jBuieu3hwk1K_Yd88jGaOQbrxbIGa7kRLluTb3EzY2bm23LIQNUlPa659hbt6FzbuPYFhqNoaU21hI9CASY3jGhUbKKc8hF6PIGyqcak8-gg6H8tvrnbVtMaW2GqcOXgoIn_yCH2H2D6plF3KBlu0NG4aW8QpFWkO2Zd0O3Oudjg3nPLIgJyA"/>
           </div>
           <div className="text-left">
           <span className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest">Recipient Organization</span>
@@ -207,7 +148,7 @@ export default function Page() {
           <div className="w-full bg-surface-container p-6 rounded-xl flex flex-col md:flex-row items-center justify-between gap-4 mb-12">
           <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-on-surface-variant">history_edu</span>
-          <span className="text-body-md text-on-surface">Audit Reference: <code className="bg-surface-container-highest px-2 py-0.5 rounded text-primary font-mono">{consent.ledgerHash ? consent.ledgerHash.substring(0, 16) + "..." : "VT-GENESIS"}</code></span>
+          <span className="text-body-md text-on-surface">Audit Reference: <code className="bg-surface-container-highest px-2 py-0.5 rounded text-primary font-mono">{consent.solanaTxSignature ? consent.solanaTxSignature.substring(0, 16) + "..." : "VT-GENESIS"}</code></span>
           </div>
           <Link href="/audit" className="flex items-center gap-2 text-primary font-label-md hover:underline">
             <span className="material-symbols-outlined text-sm">download</span> View Audit Trail

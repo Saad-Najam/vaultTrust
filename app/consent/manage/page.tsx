@@ -5,6 +5,8 @@ import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import { formatConsentExpiry } from "@/lib/consent_display";
+import type { Consent, VerificationResponse, VerifiedLedgerEntry } from "@/lib/api_types";
 
 // First 6 + last 4 characters, per the standard Explorer-link truncation format.
 function truncateSignature(sig: string | null | undefined): string {
@@ -17,12 +19,23 @@ function explorerTxUrl(sig: string): string {
   return `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
 }
 
+/** Days left on a rolling consent; one-time and revoked consents have none. */
+function daysRemaining(consent: Consent): string {
+  if (consent.status === "REVOKED") return "Access revoked";
+  if (consent.duration === "ONE_TIME") return "Single use";
+  const granted = new Date(consent.grantedAt);
+  if (Number.isNaN(granted.getTime())) return "—";
+  const expiry = new Date(granted);
+  expiry.setMonth(expiry.getMonth() + 6);
+  const days = Math.ceil((expiry.getTime() - Date.now()) / (1000 * 3600 * 24));
+  return days > 0 ? `${days} days remaining` : "Expired";
+}
+
 export default function Page() {
-  const [activeConsent, setActiveConsent] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [verification, setVerification] = useState<any>(null);
+  const [activeConsent, setActiveConsent] = useState<Consent | null>(null);
+  const [verification, setVerification] = useState<VerificationResponse | null>(null);
   const [revokeError, setRevokeError] = useState<string | null>(null);
-  const [auditEntries, setAuditEntries] = useState<any[]>([]);
+  const [auditEntries, setAuditEntries] = useState<VerifiedLedgerEntry[]>([]);
 
   useEffect(() => {
     const fetchActive = async () => {
@@ -59,8 +72,6 @@ export default function Page() {
         }
       } catch (err) {
         console.error(err);
-      } finally {
-        setLoading(false);
       }
     };
     fetchActive();
@@ -89,21 +100,6 @@ export default function Page() {
       (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     )
     .slice(0, 4);
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
 
   const openModal = () => {
     if (typeof document !== 'undefined') {
@@ -291,10 +287,10 @@ export default function Page() {
         <div className="space-y-2">
         <p className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-wider">Expiry Date</p>
         <p className="text-body-lg font-body-lg text-on-surface font-semibold">
-          {new Date(activeConsent.expiresAt).toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"})}
+          {formatConsentExpiry(activeConsent)}
         </p>
         <p className="text-label-sm text-secondary font-medium">
-          {Math.ceil((new Date(activeConsent.expiresAt).getTime() - Date.now()) / (1000 * 3600 * 24))} days remaining
+          {daysRemaining(activeConsent)}
         </p>
         </div>
         </div>
@@ -373,7 +369,7 @@ export default function Page() {
       {recentActivity.length === 0 ? (
         <li className="text-label-sm text-on-surface-variant">No ledger activity recorded yet.</li>
       ) : (
-        recentActivity.map((entry: any) => (
+        recentActivity.map((entry) => (
         <li key={entry.id} className="flex gap-3">
         <div className={`w-2 h-2 rounded-full mt-2 ${entry.verified === false ? "bg-error" : "bg-secondary"}`}></div>
         <div>
@@ -421,7 +417,7 @@ export default function Page() {
       <div className="w-12 h-12 rounded-full bg-error-container/30 text-error flex items-center justify-center mb-6">
       <span className="material-symbols-outlined" style={{"fontVariationSettings":"'FILL' 1"}}>warning</span>
       </div>
-      <h3 className="text-headline-sm font-headline-sm text-on-surface mb-2">Revoke UBL's access?</h3>
+      <h3 className="text-headline-sm font-headline-sm text-on-surface mb-2">Revoke UBL&apos;s access?</h3>
       <p className="text-body-md text-on-surface-variant leading-relaxed">
                           Access lost immediately, revocation recorded in audit trail. This action cannot be undone without a new application process.
                       </p>

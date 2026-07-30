@@ -3,6 +3,9 @@ import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { computeIncomeScore } from "@/lib/scoring";
 import { generateScoreExplanation, generateImprovementPlan, ExplanationLanguage } from "@/lib/explain";
+import { computeSpendCreditMetrics } from "@/lib/scoring";
+import { assessEligibility, resolveDisclosure, cappedOfferPKR } from "@/lib/eligibility";
+import { getErrorMessage } from "@/lib/errors";
 
 export async function GET(request: Request) {
   try {
@@ -73,10 +76,42 @@ export async function GET(request: Request) {
     // Component D: Diversity
     const diversityScoreRaw = scores.sourceDiversityScore * 100;
 
+    // Spend/credit health is derived from the score we just computed, so DTI is
+    // always measured against the same income figure reported above.
+    const creditCards = await dbService.listCreditCards(userId);
+    const connectedIds = new Set(
+      allSources.filter((s) => s.status === "CONNECTED").map((s) => s.id)
+    );
+    const spendCredit = computeSpendCreditMetrics(
+      creditCards.filter((c) => connectedIds.has(c.sourceId)),
+      scores.avgMonthlyIncome
+    );
+
+    // Freelancer-facing preview. There may be no consent record yet, so pass
+    // null: this answers "what could I qualify for", and the UI separately
+    // warns what withholding the outflow would cost them.
+    const activeConsent = await dbService.getActiveConsent(userId);
+    const disclosure = resolveDisclosure({
+      consentSources: activeConsent?.sources ?? null,
+      hasLinkedCards: spendCredit.hasCards,
+    });
+    const eligibility = assessEligibility({
+      ivs: scores.ivs,
+      disclosure,
+      dtiTier: spendCredit.hasCards ? spendCredit.dtiTier : null,
+    });
+    // The headline offer can never exceed what the tier permits.
+    const offerPKR = cappedOfferPKR(
+      spendCredit.recommendedCreditLimitPKR,
+      eligibility
+    );
+
     return NextResponse.json({
       success: true,
       userId,
       userName: user?.name || "Freelancer",
+      spendCredit: { ...spendCredit, recommendedCreditLimitPKR: offerPKR },
+      eligibility,
       city: profile?.city || "Pakistan",
       scores: {
         ...scores,
@@ -93,10 +128,10 @@ export async function GET(request: Request) {
           }
         : {}),
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Profile reliability API endpoint error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

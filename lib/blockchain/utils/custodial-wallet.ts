@@ -32,7 +32,7 @@ export async function getOrCreateCustodialWallet(uid: string): Promise<PublicKey
   const firestore = getAdminFirestore();
   const docRef = firestore.collection(CUSTODIAL_WALLETS_COLLECTION).doc(uid);
 
-  const publicKeyBase58 = await firestore.runTransaction(async (tx: any) => {
+  const publicKeyBase58 = await firestore.runTransaction(async (tx) => {
     const snap = await tx.get(docRef);
     if (snap.exists) {
       return (snap.data() as CustodialWalletDoc).publicKey;

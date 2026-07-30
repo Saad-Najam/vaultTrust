@@ -1,69 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 
 export default function Page() {
   // TODO: Initialize landing analytics and check if user has active session to redirect to dashboard.
-
-  const [consentActive, setConsentActive] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
-    }
-  };
 
   return (
     <>
@@ -82,7 +23,7 @@ export default function Page() {
               <span className="material-symbols-outlined text-on-surface-variant" data-icon="notifications">notifications</span>
               </button>
               <div className="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
-              <img className="w-full h-full object-cover" data-alt="A professional headshot of a young Middle Eastern male freelancer with a friendly expression. He is wearing a minimalist dark green polo shirt, set against a clean, softly lit architectural background with subtle teal accents. The visual style is high-end corporate photography with a warm, modern aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXwFnrGSfAceHItEZHQvOjz5UCJySaScfrx5PtFmVLJy_1J-0fgx1NTIiISw6oyPvdn0k7jUY_cTyISa6Hp0lOqsuKwmrBDrTQx5G1S4DOOe5Ro9gLLTg85Z4yek67QsZyxI61zOIabJ3QBFFGdFm_jO2S3t7xFwFE4BsK2j-_xRW6KmH3JGPKph_KTYyC_ETGtWYm7VnOB6I5zn2K7a-HGj-fwQl_sKO5XdjwdgKI-ny7OOs5AGJC8w"/>
+              <img alt="" className="w-full h-full object-cover" data-alt="A professional headshot of a young Middle Eastern male freelancer with a friendly expression. He is wearing a minimalist dark green polo shirt, set against a clean, softly lit architectural background with subtle teal accents. The visual style is high-end corporate photography with a warm, modern aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXwFnrGSfAceHItEZHQvOjz5UCJySaScfrx5PtFmVLJy_1J-0fgx1NTIiISw6oyPvdn0k7jUY_cTyISa6Hp0lOqsuKwmrBDrTQx5G1S4DOOe5Ro9gLLTg85Z4yek67QsZyxI61zOIabJ3QBFFGdFm_jO2S3t7xFwFE4BsK2j-_xRW6KmH3JGPKph_KTYyC_ETGtWYm7VnOB6I5zn2K7a-HGj-fwQl_sKO5XdjwdgKI-ny7OOs5AGJC8w"/>
               </div>
               </div>
               </header>

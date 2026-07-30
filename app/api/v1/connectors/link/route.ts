@@ -3,8 +3,9 @@ import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { getPlatformAdapter } from "@/lib/adapters";
 import { recomputeAndPersistScore, toScoreResponse } from "@/lib/score_service";
-import { PLATFORMS } from "@/lib/platforms";
+import { PLATFORMS, isIncomePlatform } from "@/lib/platforms";
 import { z } from "zod";
+import { errorStartsWith, getErrorMessage } from "@/lib/errors";
 
 const linkSchema = z.object({
   platform: z.enum(PLATFORMS),
@@ -40,8 +41,21 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validated = linkSchema.parse(body);
 
+    // Outflow sources have their own connector — linking one here would hand it
+    // to a transaction generator and count a card balance as earnings.
+    if (!isIncomePlatform(validated.platform)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `${validated.platform} is an outflow source. Link it via /api/v1/connectors/credit-card instead.`,
+        },
+        { status: 400 }
+      );
+    }
+    const platform = validated.platform;
+
     // Derive the deterministic sourceId that SandboxAdapter will produce
-    const expectedSourceId = `${authUser.uid}_${validated.platform.toLowerCase()}`;
+    const expectedSourceId = `${authUser.uid}_${platform.toLowerCase()}`;
     const existingSource = await dbService.getConnectedSource(
       authUser.uid,
       expectedSourceId
@@ -52,19 +66,19 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          error: `ALREADY_CONNECTED: ${validated.platform} is already connected. Disconnect it first to re-link.`,
+          error: `ALREADY_CONNECTED: ${platform} is already connected. Disconnect it first to re-link.`,
         },
         { status: 409 }
       );
     }
 
     // 1. Resolve adapter (sandbox in all mock environments)
-    const adapter = getPlatformAdapter(validated.platform);
+    const adapter = getPlatformAdapter(platform);
 
     // 2. Perform connection handshake to get source metadata
     const source = await adapter.connect(
       authUser.uid,
-      validated.platform,
+      platform,
       validated.authCode
     );
 
@@ -88,7 +102,7 @@ export async function POST(request: Request) {
     const transactions = await adapter.fetchTransactions(
       authUser.uid,
       source.id,
-      validated.platform
+      platform
     );
     await dbService.bulkCreateTransactions(authUser.uid, source.id, transactions);
 
@@ -99,9 +113,9 @@ export async function POST(request: Request) {
       success: true,
       source: { ...source, lastSyncedAt: syncedAt },
       score: toScoreResponse(scores),
-      message: `${validated.platform} linked and transactions populated successfully.`,
+      message: `${platform} linked and transactions populated successfully.`,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("[Link POST] Error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -109,14 +123,14 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    if (error.message && error.message.startsWith("NOT_CONFIGURED")) {
+    if (errorStartsWith(error, "NOT_CONFIGURED")) {
       return NextResponse.json(
-        { success: false, error: error.message },
+        { success: false, error: getErrorMessage(error) },
         { status: 501 }
       );
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }
@@ -177,7 +191,7 @@ export async function DELETE(request: Request) {
       score: toScoreResponse(scores),
       message: `Source disconnected successfully. Data retained for audit.`,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("[Link DELETE] Error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -186,7 +200,7 @@ export async function DELETE(request: Request) {
       );
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

@@ -6,6 +6,7 @@ import { isRateLimited } from "@/lib/rate_limiter";
 import { grantConsent as grantConsentOnChain } from "@/lib/blockchain/client/consent-client";
 import { PLATFORMS } from "@/lib/platforms";
 import { z } from "zod";
+import { getErrorMessage } from "@/lib/errors";
 
 const GrantConsentSchema = z.object({
   sources: z.array(z.enum(PLATFORMS)),
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
           reason: "Superseded by new consent grant policy",
           revokedAt,
         });
-      } catch (ledgerError: any) {
+      } catch (ledgerError) {
         console.error("[ROLLBACK] Ledger write failed after revoking superseded consent — reverting to ACTIVE", {
           consentId: activeConsent.id,
           ledgerError,
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
         purpose,
         grantedAt: newConsent.grantedAt,
       });
-    } catch (ledgerError: any) {
+    } catch (ledgerError) {
       console.error("[ROLLBACK] Ledger write failed after consent creation — deleting orphaned consent doc", {
         consentId,
         ledgerError,
@@ -144,10 +145,10 @@ export async function POST(request: Request) {
         solanaTxSignature: onChain.signature,
         solanaConsentPda: onChain.consentPda,
       });
-    } catch (chainError: any) {
+    } catch (chainError) {
       console.error("[BLOCKCHAIN WRITE FAILED - grant_consent]", {
         consentId,
-        error: chainError.message || chainError,
+        error: getErrorMessage(chainError),
       });
       blockchain = { status: "FAILED" };
       // Recording the failure status is itself best-effort — a hiccup here
@@ -155,7 +156,7 @@ export async function POST(request: Request) {
       try {
         await dbService.updateConsent(consentId, {
           blockchainStatus: "FAILED",
-          blockchainError: chainError.message || String(chainError),
+          blockchainError: getErrorMessage(chainError),
         });
       } catch (statusUpdateError) {
         console.error("[FAILED TO RECORD BLOCKCHAIN FAILURE STATUS]", { consentId, statusUpdateError });
@@ -169,13 +170,13 @@ export async function POST(request: Request) {
       blockchain,
       message: "Secure consent granted and recorded in tamper-evident ledger.",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Grant consent API endpoint error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json({ success: false, error: error.issues }, { status: 400 });
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { ComputedScoreResult } from "./scoring";
 import { IMPROVEMENT_RULES, identifyWeakFactors, WeakFactorKey } from "./improvementRules";
+import { getErrorMessage } from "./errors";
 
 export type ExplanationLanguage = "en" | "roman-urdu";
 
@@ -134,9 +135,9 @@ export async function generateScoreExplanation(
     const explanation = await callGemini(buildExplanationPrompt(scoreData, language));
     setCached(key, explanation);
     return explanation;
-  } catch (err: any) {
+  } catch (err) {
     console.error("[SCORE EXPLANATION] Gemini call failed, using fallback template", {
-      error: err.message || String(err),
+      error: getErrorMessage(err),
     });
     const fallback = fallbackExplanation(scoreData, language);
     setCached(key, fallback);
@@ -217,9 +218,9 @@ export async function generateImprovementPlan(
     if (suggestions.length === 0) throw new Error("Gemini returned no parsable suggestions");
     setCached(key, suggestions);
     return { suggestions, disclaimer: IMPROVEMENT_DISCLAIMER };
-  } catch (err: any) {
+  } catch (err) {
     console.error("[IMPROVEMENT PLAN] Gemini call failed, using fallback template", {
-      error: err.message || String(err),
+      error: getErrorMessage(err),
     });
     const fallback = fallbackImprovementSuggestions(weakFactors, language);
     setCached(key, fallback);

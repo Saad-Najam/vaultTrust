@@ -4,6 +4,7 @@ import { verifyAuthToken } from "@/lib/auth_helper";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { revokeConsent as revokeConsentOnChain } from "@/lib/blockchain/client/consent-client";
 import { z } from "zod";
+import { getErrorMessage } from "@/lib/errors";
 
 const RevokeConsentSchema = z.object({
   consentId: z.string().optional(),
@@ -38,7 +39,7 @@ async function handleRevocation(request: Request) {
           consentId = parsed.data.consentId;
           bankId = parsed.data.bankId;
         }
-      } catch (e) {
+      } catch {
         // Body reading failed or empty, fallback to active search
       }
     }
@@ -94,15 +95,15 @@ async function handleRevocation(request: Request) {
         blockchainStatus: "CONFIRMED",
         solanaTxSignature: onChain.signature,
       });
-    } catch (chainError: any) {
+    } catch (chainError) {
       console.error("[BLOCKCHAIN WRITE FAILED - revoke_consent]", {
         consentId: consent.id,
-        error: chainError.message || chainError,
+        error: getErrorMessage(chainError),
       });
       try {
         await dbService.updateConsent(consent.id, {
           blockchainStatus: "FAILED",
-          blockchainError: chainError.message || String(chainError),
+          blockchainError: getErrorMessage(chainError),
         });
       } catch (statusUpdateError) {
         console.error("[FAILED TO RECORD BLOCKCHAIN FAILURE STATUS]", { consentId: consent.id, statusUpdateError });
@@ -121,10 +122,10 @@ async function handleRevocation(request: Request) {
       blockchain,
       message: "Consent successfully revoked and recorded in ledger.",
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Revoke consent API endpoint error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

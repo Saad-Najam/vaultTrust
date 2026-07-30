@@ -5,10 +5,10 @@ import Link from "next/link";
 import BankSidebar from "@/components/BankSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import type { ApplicantListItem } from "@/lib/api_types";
 
 export default function Page() {
-  const [applicants, setApplicants] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [applicants, setApplicants] = useState<ApplicantListItem[]>([]);
 
   useEffect(() => {
     const loadApplicants = async () => {
@@ -20,70 +20,10 @@ export default function Page() {
         }
       } catch (err) {
         console.error(err);
-      } finally {
-        setLoading(false);
       }
     };
     loadApplicants();
   }, []);
-
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
-
-  // Interaction helpers for events inside the HTML designs
-  const openDetail = (eventId: string) => {
-    console.log('Opening details for:', eventId);
-    if (typeof document !== 'undefined') {
-      const rows = document.querySelectorAll('tbody tr');
-      rows.forEach(row => {
-        row.classList.remove('active-row', 'border-l-4', 'border-primary');
-      });
-    }
-  };
-
-  const openModal = () => {
-    if (typeof document !== 'undefined') {
-      const modal = document.getElementById('revocationModal');
-      const content = document.getElementById('modalContent');
-      if (modal && content) {
-        modal.classList.remove('hidden');
-        setTimeout(() => {
-          content.classList.remove('scale-95', 'opacity-0');
-          content.classList.add('scale-100', 'opacity-100');
-        }, 10);
-      }
-    }
-  };
-
-  const closeModal = () => {
-    if (typeof document !== 'undefined') {
-      const content = document.getElementById('modalContent');
-      const modal = document.getElementById('revocationModal');
-      if (content && modal) {
-        content.classList.add('scale-95', 'opacity-0');
-        content.classList.remove('scale-100', 'opacity-100');
-        setTimeout(() => {
-          modal.classList.add('hidden');
-        }, 300);
-      }
-    }
-  };
-
-  const executeRevoke = () => {
-    closeModal();
-    if (typeof document !== 'undefined') {
-      const toast = document.getElementById('successToast');
-      if (toast) {
-        setTimeout(() => {
-          toast.classList.remove('translate-y-20', 'opacity-0');
-          setTimeout(() => {
-            toast.classList.add('translate-y-20', 'opacity-0');
-          }, 4000);
-        }, 400);
-      }
-    }
-  };
 
   return (
     <>
@@ -218,7 +158,7 @@ export default function Page() {
       </tr>
       </thead>
       <tbody className="divide-y divide-outline-variant/10">
-      {applicants.map((app: any) => {
+      {applicants.map((app) => {
         const initials = app.name
           .split(" ")
           .map((n: string) => n[0])
@@ -265,6 +205,33 @@ export default function Page() {
                     : "No Consent"}
                 </span>
               </div>
+              {/*  A withheld debt disclosure must be visible at list level —
+                   otherwise a strong IVS looks approvable at a glance.  */}
+              {app.consentStatus === "ACTIVE" && app.outflowDisclosure && (
+                <div className="mt-1.5 flex items-center gap-1">
+                  {app.outflowDisclosure === "SHARED" ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary">
+                      <span className="material-symbols-outlined text-[13px]">verified</span>
+                      Debt disclosed
+                    </span>
+                  ) : app.outflowDisclosure === "DECLARED_NONE" ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-on-tertiary-container">
+                      <span className="material-symbols-outlined text-[13px]">info</span>
+                      No debt (self-declared)
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-error">
+                      <span className="material-symbols-outlined text-[13px]">warning</span>
+                      Debt DECLINED
+                    </span>
+                  )}
+                  {app.eligibilityCapped && (
+                    <span className="text-[11px] text-error font-bold">
+                      · capped {app.eligibilityTier}
+                    </span>
+                  )}
+                </div>
+              )}
             </td>
             <td className="px-6 py-5">
               <div className="flex items-center gap-1 text-primary">

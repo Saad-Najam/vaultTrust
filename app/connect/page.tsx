@@ -6,10 +6,11 @@ import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import {
-  PLATFORMS,
+  INCOME_PLATFORMS,
   PLATFORM_META,
   WALLET_PLATFORMS,
   Platform,
+  IncomePlatform,
 } from "@/lib/platforms";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -34,13 +35,52 @@ interface IncomeScore {
   computedAt: string;
 }
 
-type SourceMix = Record<Platform, number>;
+type SourceMix = Record<IncomePlatform, number>;
+
+interface CreditCard {
+  id: string;
+  sourceId: string;
+  provider: string;
+  last4: string;
+  creditLimitPKR: number;
+  statementBalancePKR: number;
+  minPaymentDuePKR: number;
+  statementDate: string;
+  lastSyncedAt: string;
+}
+
+interface SpendCreditBadge {
+  label: string;
+  status: "HEALTHY" | "WATCH" | "AT_RISK" | "UNKNOWN";
+  detail: string;
+}
+
+interface SpendCredit {
+  hasCards: boolean;
+  cardCount: number;
+  totalCreditLimitPKR: number;
+  totalStatementBalancePKR: number;
+  totalMonthlyObligationPKR: number;
+  utilizationPercent: number | null;
+  dtiPercent: number | null;
+  dtiTier: "LOW" | "MODERATE" | "HIGH";
+  netFreeCashFlowPKR: number;
+  recommendedCreditLimitPKR: number;
+  onTimeRepaymentPercent: number | null;
+  badges: {
+    utilization: SpendCreditBadge;
+    repayment: SpendCreditBadge;
+    dti: SpendCreditBadge;
+  };
+}
 
 interface SummaryData {
   sourceMix: SourceMix | null;
   incomeScore: IncomeScore | null;
   totalTransactions: number;
   distinctClientCount: number;
+  creditCards: CreditCard[];
+  spendCredit: SpendCredit | null;
 }
 
 // ─── Small helper components ──────────────────────────────────────────────────
@@ -240,16 +280,276 @@ function WalletSourceCard({
   );
 }
 
+function badgeTone(status: SpendCreditBadge["status"]) {
+  switch (status) {
+    case "HEALTHY":
+      return "bg-[#E8F5E9] text-primary";
+    case "WATCH":
+      return "bg-tertiary-container/25 text-on-tertiary-container";
+    case "AT_RISK":
+      return "bg-error-container/40 text-on-error-container";
+    default:
+      return "bg-surface-container-high text-on-surface-variant";
+  }
+}
+
+function badgeIcon(status: SpendCreditBadge["status"]) {
+  switch (status) {
+    case "HEALTHY":
+      return "check_circle";
+    case "WATCH":
+      return "warning";
+    case "AT_RISK":
+      return "error";
+    default:
+      return "help";
+  }
+}
+
+const PKR = (n: number) => `PKR ${Math.round(n).toLocaleString()}`;
+
+/**
+ * Credit Card & Outflow connector. Distinct from the income cards by design:
+ * it reports obligations, so it carries its own accent colour and never feeds
+ * the income source mix.
+ */
+function CreditCardConnector({
+  cards,
+  spend,
+  connecting,
+  syncing,
+  disconnecting,
+  error,
+  onLink,
+  onSync,
+  onDisconnect,
+}: {
+  cards: CreditCard[];
+  spend: SpendCredit | null;
+  connecting: boolean;
+  syncing: boolean;
+  disconnecting: boolean;
+  error: string;
+  onLink: () => void;
+  onSync: () => void;
+  onDisconnect: () => void;
+}) {
+  const meta = PLATFORM_META.CREDIT_CARD;
+  const linked = cards.length > 0;
+  const utilisation = spend?.utilizationPercent ?? 0;
+  const primary = cards[0];
+
+  return (
+    <div className="md:col-span-12 glass-card rounded-[24px] p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] relative overflow-hidden group hover:shadow-xl transition-all duration-300">
+      {/* Accent wash keeps the outflow card visually separate from earnings */}
+      <div
+        className="absolute inset-y-0 left-0 w-1.5"
+        style={{ backgroundColor: meta.color }}
+        aria-hidden="true"
+      />
+
+      <div className="flex flex-col lg:flex-row lg:items-start gap-stack-lg">
+        {/* Identity */}
+        <div className="flex items-start gap-4 lg:w-1/3">
+          <div
+            className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0"
+            style={{ backgroundColor: `${meta.color}1a` }}
+          >
+            <span
+              className="material-symbols-outlined text-3xl"
+              style={{ color: meta.color }}
+            >
+              {meta.icon}
+            </span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-headline-sm font-headline-sm">
+                {linked ? primary.provider : "Credit Card & Outflow"}
+              </h4>
+              <span
+                className={`px-3 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                  linked
+                    ? "bg-[#E8F5E9] text-primary"
+                    : "bg-surface-container-high text-on-surface-variant"
+                }`}
+              >
+                {linked ? "Linked" : "Not Linked"}
+              </span>
+            </div>
+            <p className="text-label-sm text-on-surface-variant uppercase tracking-wider">
+              {linked ? `•••• ${primary.last4}` : meta.tagline}
+            </p>
+            {cards.length > 1 && (
+              <p className="text-label-sm text-on-surface-variant mt-1">
+                +{cards.length - 1} more card{cards.length > 2 ? "s" : ""} aggregated
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Limit vs balance + utilisation */}
+        <div className="flex-1 space-y-stack-md">
+          {linked && spend ? (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-stack-md">
+                <div className="p-stack-md bg-surface-container-low rounded-xl">
+                  <p className="text-label-sm text-on-surface-variant mb-1">Credit Limit</p>
+                  <p className="text-body-md font-bold text-on-surface">
+                    {PKR(spend.totalCreditLimitPKR)}
+                  </p>
+                </div>
+                <div className="p-stack-md bg-surface-container-low rounded-xl">
+                  <p className="text-label-sm text-on-surface-variant mb-1">Balance</p>
+                  <p className="text-body-md font-bold text-on-surface">
+                    {PKR(spend.totalStatementBalancePKR)}
+                  </p>
+                </div>
+                <div className="p-stack-md bg-surface-container-low rounded-xl col-span-2 sm:col-span-1">
+                  <p className="text-label-sm text-on-surface-variant mb-1">Min Due / mo</p>
+                  <p className="text-body-md font-bold text-on-surface">
+                    {PKR(spend.totalMonthlyObligationPKR)}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between text-label-sm mb-1">
+                  <span className="font-medium text-on-surface-variant">
+                    Utilisation
+                  </span>
+                  <span className="font-bold" style={{ color: meta.color }}>
+                    {utilisation}%
+                  </span>
+                </div>
+                <div
+                  className="w-full bg-surface-container-high rounded-full h-2.5 overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={utilisation}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Credit utilisation"
+                >
+                  <div
+                    className="h-2.5 rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.min(100, utilisation)}%`,
+                      backgroundColor:
+                        utilisation < 30
+                          ? "#003127"
+                          : utilisation <= 50
+                            ? "#735c00"
+                            : "#ba1a1a",
+                    }}
+                  />
+                </div>
+                <p className="text-label-sm text-on-surface-variant mt-1">
+                  Last statement {formatRelativeTime(primary.statementDate)} · under 30% is healthy
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {[spend.badges.utilization, spend.badges.repayment, spend.badges.dti].map(
+                  (b) => (
+                    <span
+                      key={b.label}
+                      title={b.detail}
+                      className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-label-sm font-bold ${badgeTone(b.status)}`}
+                    >
+                      <span className="material-symbols-outlined text-[14px]">
+                        {badgeIcon(b.status)}
+                      </span>
+                      {b.label}
+                    </span>
+                  )
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-body-md text-on-surface-variant max-w-xl">
+              Link a card or upload a statement to track utilisation and
+              debt-to-income. Only aggregated ratios are ever shared — never your
+              transactions or card number.
+            </p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="lg:w-auto flex flex-col gap-2 lg:min-w-[190px]">
+          {linked ? (
+            <>
+              <button
+                onClick={onSync}
+                disabled={syncing}
+                className="w-full py-3 px-5 border-2 text-on-surface rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-surface-container transition-all active:scale-95 disabled:opacity-60"
+                style={{ borderColor: meta.color, color: meta.color }}
+              >
+                {syncing ? (
+                  <>
+                    <Spinner />
+                    Syncing…
+                  </>
+                ) : (
+                  <>
+                    Sync Statement
+                    <span className="material-symbols-outlined text-[18px]">sync</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={onDisconnect}
+                disabled={disconnecting}
+                className="w-full py-3 px-5 border-2 border-outline text-on-surface-variant rounded-xl font-bold flex items-center justify-center gap-2 hover:border-error hover:text-error transition-colors disabled:opacity-50"
+              >
+                {disconnecting ? (
+                  <Spinner />
+                ) : (
+                  <>
+                    Disconnect
+                    <span className="material-symbols-outlined text-[18px]">link_off</span>
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={onLink}
+              disabled={connecting}
+              className="w-full py-3 px-5 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-95 disabled:opacity-60"
+              style={{ backgroundColor: meta.color }}
+            >
+              {connecting ? (
+                <>
+                  <Spinner />
+                  Linking…
+                </>
+              ) : (
+                <>
+                  Link Credit Card
+                  <span className="material-symbols-outlined text-[18px]">add</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <InlineError message={error} />
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Page() {
   const [sources, setSources] = useState<ConnectedSource[]>([]);
-  const [loading, setLoading] = useState(true);
   const [summaryData, setSummaryData] = useState<SummaryData>({
     sourceMix: null,
     incomeScore: null,
     totalTransactions: 0,
     distinctClientCount: 0,
+    creditCards: [],
+    spendCredit: null,
   });
 
   // Per-source loading states
@@ -274,18 +574,59 @@ export default function Page() {
           incomeScore: data.incomeScore || null,
           totalTransactions: data.totalTransactions || 0,
           distinctClientCount: data.distinctClientCount || 0,
+          creditCards: data.creditCards || [],
+          spendCredit: data.spendCredit || null,
         });
       }
     } catch (err) {
       console.error("[ConnectPage] fetchSources error:", err);
-    } finally {
-      setLoading(false);
-    }
+      }
   };
 
   useEffect(() => {
-    fetchSources();
+    void (async () => {
+      await fetchSources();
+    })();
   }, []);
+
+  // ── Credit card / outflow handlers ──────────────────────────────────────────
+
+  const [cardBusy, setCardBusy] = useState<null | "link" | "sync" | "remove">(null);
+
+  /** One helper for all three card verbs — they share success/error handling. */
+  const callCreditCard = async (
+    action: "link" | "sync" | "remove",
+    method: "POST" | "PATCH" | "DELETE"
+  ) => {
+    setCardBusy(action);
+    clearError("CREDIT_CARD");
+    try {
+      const res = await fetchWithAuth("/api/v1/connectors/credit-card", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchSources();
+      } else {
+        const raw = data.error;
+        const msg =
+          typeof raw === "string"
+            ? raw.replace(/^ALREADY_LINKED:\s*/i, "")
+            : "Could not update your credit card. Please try again.";
+        setErrorBySource((prev) => ({ ...prev, CREDIT_CARD: msg }));
+      }
+    } catch (err) {
+      console.error(`[ConnectPage] credit card ${action} error:`, err);
+      setErrorBySource((prev) => ({
+        ...prev,
+        CREDIT_CARD: "Network error. Please try again.",
+      }));
+    } finally {
+      setCardBusy(null);
+    }
+  };
 
   /** Re-pulls transactions from the provider, then refreshes the view. */
   const handleSync = async () => {
@@ -676,6 +1017,19 @@ export default function Page() {
               />
             ))}
 
+            {/*  Card: Credit Card & Outflow (SpendSmart)  */}
+            <CreditCardConnector
+              cards={summaryData.creditCards}
+              spend={summaryData.spendCredit}
+              connecting={cardBusy === "link"}
+              syncing={cardBusy === "sync"}
+              disconnecting={cardBusy === "remove"}
+              error={errorBySource["CREDIT_CARD"] || ""}
+              onLink={() => callCreditCard("link", "POST")}
+              onSync={() => callCreditCard("sync", "PATCH")}
+              onDisconnect={() => callCreditCard("remove", "DELETE")}
+            />
+
             {/*  Card: Local Invoicing  */}
             <div className="md:col-span-12 lg:col-span-6 bg-surface-container-lowest rounded-[24px] p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border-2 border-dashed border-outline-variant flex items-center gap-stack-lg group hover:border-primary/50 transition-colors">
               <div className="w-20 h-20 bg-surface-container flex-shrink-0 rounded-2xl flex items-center justify-center group-hover:bg-primary-container/10 transition-colors">
@@ -852,7 +1206,7 @@ export default function Page() {
                       <p className="text-label-md font-bold text-on-surface-variant uppercase tracking-wider">
                         Income Source Mix (6-month, PKR)
                       </p>
-                      {PLATFORMS.map((platform) => {
+                      {INCOME_PLATFORMS.map((platform) => {
                         const meta = PLATFORM_META[platform];
                         const percent = sourceMix[platform] ?? 0;
                         return (

@@ -73,7 +73,7 @@ export async function recordConsentEvent(
 
   // Transaction claims the next sequence + previous hash atomically, so
   // concurrent appends can't race and corrupt the chain ordering.
-  return firestore.runTransaction(async (tx: any) => {
+  return firestore.runTransaction(async (tx) => {
     const metaSnap = await tx.get(metaRef);
     const metaData = metaSnap.exists ? metaSnap.data() : null;
     const previousRecordHash: string = metaData ? metaData.lastHash : GENESIS_HASH;
@@ -127,7 +127,7 @@ export async function verify(): Promise<ConsentLedgerFallbackVerification> {
   const snap = await firestore.collection(RECORDS_COLLECTION).orderBy("sequence", "asc").get();
 
   const records: ConsentLedgerFallbackRecord[] = [];
-  snap.forEach((doc: any) => records.push(doc.data() as ConsentLedgerFallbackRecord));
+  snap.forEach((doc) => records.push(doc.data() as ConsentLedgerFallbackRecord));
 
   const issues: ConsentLedgerFallbackIssue[] = [];
   let expectedPreviousHash = GENESIS_HASH;

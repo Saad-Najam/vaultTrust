@@ -34,6 +34,29 @@ export interface ConnectedSource {
   lastSyncedAt?: string;
 }
 
+/**
+ * A linked credit card and its latest statement. Stored separately from
+ * `Transaction` because these are obligations, not earnings — keeping them out
+ * of the transaction collection means they can never be swept into income
+ * aggregation by accident.
+ */
+export interface CreditCardAccount {
+  id: string;
+  freelancerId: string;
+  /** The ConnectedSource (platform CREDIT_CARD) this card belongs to. */
+  sourceId: string;
+  provider: string; // e.g. "UBL Master Card"
+  last4: string;
+  creditLimitPKR: number;
+  statementBalancePKR: number;
+  minPaymentDuePKR: number;
+  statementDate: string; // ISO
+  /** Repayment history, used for the on-time badge. */
+  onTimePayments: number;
+  totalPayments: number;
+  lastSyncedAt: string;
+}
+
 export interface Transaction {
   id: string;
   sourceId: string;
@@ -71,6 +94,11 @@ export interface ConsentLedgerEntry {
   payloadHash: string;
   prevHash: string;
   thisHash: string;
+  /**
+   * The raw event body, persisted so the chain can be re-verified later.
+   * `payloadHash` is the authoritative digest; this is what it hashes.
+   */
+  payload?: Record<string, unknown>;
 }
 
 export interface IncomeScore {
@@ -115,7 +143,7 @@ export const dbService = {
     const firestore = getAdminFirestore();
     const snap = await firestore.collection("users").get();
     const users: User[] = [];
-    snap.forEach((doc: any) => users.push(doc.data() as User));
+    snap.forEach((doc) => users.push(doc.data() as User));
     return users;
   },
 
@@ -141,7 +169,7 @@ export const dbService = {
       .collection("sources")
       .get();
     const list: ConnectedSource[] = [];
-    snap.forEach((doc: any) => list.push(doc.data() as ConnectedSource));
+    snap.forEach((doc) => list.push(doc.data() as ConnectedSource));
     return list;
   },
 
@@ -180,6 +208,54 @@ export const dbService = {
       .update(fields);
   },
 
+  // --- CREDIT CARDS ---
+  // Firestore: creditCards/{uid}/cards/{cardId}
+  async listCreditCards(freelancerId: string): Promise<CreditCardAccount[]> {
+    const firestore = getAdminFirestore();
+    const snap = await firestore
+      .collection("creditCards")
+      .doc(freelancerId)
+      .collection("cards")
+      .get();
+    const list: CreditCardAccount[] = [];
+    snap.forEach((doc) => list.push(doc.data() as CreditCardAccount));
+    return list;
+  },
+
+  async getCreditCard(
+    freelancerId: string,
+    cardId: string
+  ): Promise<CreditCardAccount | null> {
+    const firestore = getAdminFirestore();
+    const snap = await firestore
+      .collection("creditCards")
+      .doc(freelancerId)
+      .collection("cards")
+      .doc(cardId)
+      .get();
+    return snap.exists ? (snap.data() as CreditCardAccount) : null;
+  },
+
+  async upsertCreditCard(card: CreditCardAccount): Promise<void> {
+    const firestore = getAdminFirestore();
+    await firestore
+      .collection("creditCards")
+      .doc(card.freelancerId)
+      .collection("cards")
+      .doc(card.id)
+      .set(card, { merge: true });
+  },
+
+  async deleteCreditCard(freelancerId: string, cardId: string): Promise<void> {
+    const firestore = getAdminFirestore();
+    await firestore
+      .collection("creditCards")
+      .doc(freelancerId)
+      .collection("cards")
+      .doc(cardId)
+      .delete();
+  },
+
   // --- TRANSACTIONS ---
   // Firestore: transactions/{uid}/sources/{sourceId}/records/{txId}
   async listTransactions(freelancerId: string): Promise<Transaction[]> {
@@ -202,7 +278,7 @@ export const dbService = {
         .collection("records")
         .get();
       
-      txSnap.forEach((doc: any) => allTx.push(doc.data() as Transaction));
+      txSnap.forEach((doc) => allTx.push(doc.data() as Transaction));
     }
     return allTx;
   },
@@ -217,7 +293,7 @@ export const dbService = {
       .collection("records")
       .get();
     const list: Transaction[] = [];
-    snap.forEach((doc: any) => list.push(doc.data() as Transaction));
+    snap.forEach((doc) => list.push(doc.data() as Transaction));
     return list;
   },
 
@@ -263,7 +339,7 @@ export const dbService = {
     
     const snap = await queryRef.get();
     let active: Consent | null = null;
-    snap.forEach((doc: any) => {
+    snap.forEach((doc) => {
       active = doc.data() as Consent;
     });
     return active;
@@ -299,7 +375,7 @@ export const dbService = {
       .get();
     
     const list: ConsentLedgerEntry[] = [];
-    snap.forEach((doc: any) => list.push(doc.data() as ConsentLedgerEntry));
+    snap.forEach((doc) => list.push(doc.data() as ConsentLedgerEntry));
     return list;
   },
 
@@ -320,7 +396,7 @@ export const dbService = {
         .collection("entries")
         .get();
       
-      entriesSnap.forEach((doc: any) => allEntries.push(doc.data() as ConsentLedgerEntry));
+      entriesSnap.forEach((doc) => allEntries.push(doc.data() as ConsentLedgerEntry));
     }
     return allEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   },
@@ -368,6 +444,7 @@ export const dbService = {
       "users",
       "freelancerProfiles",
       "connectedSources",
+      "creditCards",
       "transactions",
       "consents",
       "consentLedger",

@@ -5,6 +5,7 @@ import { verifyAuthToken } from "@/lib/auth_helper";
 import { verifyLedgerChain } from "@/lib/ledger";
 import { getOnChainConsent } from "@/lib/blockchain/client/consent-client";
 import { getVaultTrustProgram } from "@/lib/blockchain/client/program";
+import { getErrorMessage } from "@/lib/errors";
 
 function sha256Hex(input: string): string {
   return crypto.createHash("sha256").update(input).digest("hex");
@@ -17,7 +18,7 @@ function findLatestContentPayload(entries: ConsentLedgerEntry[]): { purpose?: st
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
     if (entry.eventType === "GRANT" || entry.eventType === "SCOPE_CHANGE") {
-      return (entry as any).payload ?? null;
+      return (entry.payload as { purpose?: string; scope?: string }) ?? null;
     }
   }
   return null;
@@ -62,8 +63,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (consent.solanaTxSignature) {
       try {
         onChain = await getOnChainConsent({ freelancerUid: consent.freelancerId, bankUid: consent.bankId });
-      } catch (err: any) {
-        onChainError = err.message || String(err);
+      } catch (err) {
+        onChainError = getErrorMessage(err);
       }
     }
 
@@ -120,10 +121,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         : null,
       onChainError,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Consent verify API endpoint error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

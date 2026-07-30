@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { normalizeAmountToPKR } from "@/lib/scoring";
-import { PLATFORMS, Platform, zeroByPlatform } from "@/lib/platforms";
+import { INCOME_PLATFORMS, IncomePlatform, isIncomePlatform, zeroByIncomePlatform } from "@/lib/platforms";
+import { getSpendCreditSnapshot } from "@/lib/spend_service";
+import { getErrorMessage } from "@/lib/errors";
 
 /**
  * GET /api/v1/connectors/summary
@@ -26,10 +28,11 @@ export async function GET(request: Request) {
     const userId = authUser.uid;
 
     // Fetch connected sources, transactions, and persisted income score in parallel
-    const [allSources, transactions, incomeScore] = await Promise.all([
+    const [allSources, transactions, incomeScore, spendCredit] = await Promise.all([
       dbService.listConnectedSources(userId),
       dbService.listTransactions(userId),
       dbService.getIncomeScore(userId),
+      getSpendCreditSnapshot(userId),
     ]);
 
     // Filter transactions to only those belonging to CONNECTED sources
@@ -55,7 +58,7 @@ export async function GET(request: Request) {
         year: d.getFullYear(),
         month: d.getMonth(),
         totalPKR: 0,
-        byPlatform: zeroByPlatform(),
+        byPlatform: zeroByIncomePlatform(),
       };
     });
 
@@ -73,7 +76,8 @@ export async function GET(request: Request) {
         monthlyAggregates[monthIdx].totalPKR += amountPKR;
 
         const platform = platformBySourceId.get(tx.sourceId);
-        if (platform) {
+        // Outflow sources never contribute to income aggregates.
+        if (platform && isIncomePlatform(platform)) {
           monthlyAggregates[monthIdx].byPlatform[platform] += amountPKR;
         }
       }
@@ -81,17 +85,17 @@ export async function GET(request: Request) {
 
     // Source mix percentages, normalized to PKR across all 6 months. Keyed by
     // platform so a new provider needs no change here or in the consumers.
-    const platformTotals = zeroByPlatform();
+    const platformTotals = zeroByIncomePlatform();
     let totalAllMonthsPKR = 0;
 
     monthlyAggregates.forEach((m) => {
       totalAllMonthsPKR += m.totalPKR;
-      PLATFORMS.forEach((p) => {
+      INCOME_PLATFORMS.forEach((p) => {
         platformTotals[p] += m.byPlatform[p];
       });
     });
 
-    const sourceMix = PLATFORMS.reduce(
+    const sourceMix = INCOME_PLATFORMS.reduce(
       (acc, p) => ({
         ...acc,
         [p]:
@@ -99,7 +103,7 @@ export async function GET(request: Request) {
             ? Math.round((platformTotals[p] / totalAllMonthsPKR) * 100)
             : 0,
       }),
-      {} as Record<Platform, number>
+      {} as Record<IncomePlatform, number>
     );
 
     const currentMonthAgg = monthlyAggregates[5]; // Most recent month bucket
@@ -130,9 +134,9 @@ export async function GET(request: Request) {
       monthlyAggregates: monthlyAggregates.map((m) => ({
         ...m,
         totalPKR: Math.round(m.totalPKR),
-        byPlatform: PLATFORMS.reduce(
+        byPlatform: INCOME_PLATFORMS.reduce(
           (acc, p) => ({ ...acc, [p]: Math.round(m.byPlatform[p]) }),
-          {} as Record<Platform, number>
+          {} as Record<IncomePlatform, number>
         ),
       })),
       sourceMix,
@@ -151,11 +155,13 @@ export async function GET(request: Request) {
         : 0,
       totalTransactions,
       distinctClientCount,
+      creditCards: spendCredit.cards,
+      spendCredit: spendCredit.metrics,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("[Summary GET] Error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }

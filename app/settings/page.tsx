@@ -6,6 +6,7 @@ import { auth } from "@/lib/firebase";
 import { waitForAuthInit } from "@/lib/auth_client";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { useCurrentUser, setCurrentUserProfile } from "@/lib/use_current_user";
+import { getErrorMessage } from "@/lib/errors";
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -59,8 +60,10 @@ export default function Page() {
   const currentUser = useCurrentUser();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [name, setName] = useState("");
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  // `null` means "untouched" — fall back to the loaded profile. This avoids
+  // syncing server state into local state through an effect.
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [photoDraft, setPhotoDraft] = useState<string | null>(null);
   const [photoChanged, setPhotoChanged] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -76,15 +79,8 @@ export default function Page() {
     load();
   }, []);
 
-  // Seed the editable fields once the real profile has loaded (only once,
-  // so it doesn't clobber in-progress edits on re-render).
-  useEffect(() => {
-    if (!currentUser.loading) {
-      setName(currentUser.name || "");
-      setPhotoPreview(currentUser.photoURL);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser.loading]);
+  const name = nameDraft ?? currentUser.name ?? "";
+  const photoPreview = photoDraft ?? currentUser.photoURL;
 
   const handleLogout = async () => {
     if (!auth) return;
@@ -115,10 +111,10 @@ export default function Page() {
         setProfileError("That image is still too large. Please try a smaller photo.");
         return;
       }
-      setPhotoPreview(dataUrl);
+      setPhotoDraft(dataUrl);
       setPhotoChanged(true);
-    } catch (err: any) {
-      setProfileError(err.message || "Could not process that image.");
+    } catch (err) {
+      setProfileError(getErrorMessage(err, "Could not process that image."));
     }
   };
 
@@ -230,7 +226,7 @@ export default function Page() {
                   <input
                     type="text"
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    onChange={(e) => setNameDraft(e.target.value)}
                     placeholder="Your full name"
                     className="w-full px-4 py-3 rounded-xl border border-outline-variant/50 bg-surface text-body-md text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
                   />

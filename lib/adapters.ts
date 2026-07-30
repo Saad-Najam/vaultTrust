@@ -1,13 +1,13 @@
 import { ConnectedSource, Transaction } from "./db";
-import { Platform } from "./platforms";
+import { IncomePlatform, Platform, isIncomePlatform } from "./platforms";
 
 export interface PlatformAdapter {
-  connect(uid: string, platform: Platform, authCode?: string): Promise<ConnectedSource>;
+  connect(uid: string, platform: IncomePlatform, authCode?: string): Promise<ConnectedSource>;
 
   fetchTransactions(
     freelancerId: string,
     sourceId: string,
-    platform: Platform
+    platform: IncomePlatform
   ): Promise<Transaction[]>;
 }
 
@@ -27,7 +27,7 @@ interface SandboxProfile {
   ];
 }
 
-const SANDBOX_PROFILES: Record<Platform, SandboxProfile> = {
+const SANDBOX_PROFILES: Record<IncomePlatform, SandboxProfile> = {
   PAYONEER: {
     slug: "pay",
     currency: "USD",
@@ -84,8 +84,8 @@ const SANDBOX_PROFILES: Record<Platform, SandboxProfile> = {
 export class SandboxAdapter implements PlatformAdapter {
   async connect(
     uid: string,
-    platform: Platform,
-    authCode?: string
+    platform: IncomePlatform,
+    _authCode?: string
   ): Promise<ConnectedSource> {
     const id = `${uid}_${platform.toLowerCase()}`;
     return {
@@ -101,7 +101,7 @@ export class SandboxAdapter implements PlatformAdapter {
   async fetchTransactions(
     freelancerId: string,
     sourceId: string,
-    platform: Platform
+    platform: IncomePlatform
   ): Promise<Transaction[]> {
     const profile = SANDBOX_PROFILES[platform];
     if (!profile) return [];
@@ -143,7 +143,7 @@ export class PayoneerLiveAdapter implements PlatformAdapter {
     );
   }
 
-  async connect(uid: string, platform: Platform, authCode?: string): Promise<ConnectedSource> {
+  async connect(uid: string, _platform: IncomePlatform, _authCode?: string): Promise<ConnectedSource> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Payoneer Live API credentials (PAYONEER_CLIENT_ID/SECRET) are missing in environment.");
     }
@@ -159,9 +159,9 @@ export class PayoneerLiveAdapter implements PlatformAdapter {
   }
 
   async fetchTransactions(
-    freelancerId: string,
-    sourceId: string,
-    platform: Platform
+    _freelancerId: string,
+    _sourceId: string,
+    _platform: IncomePlatform
   ): Promise<Transaction[]> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Payoneer Live API credentials are missing in environment.");
@@ -179,7 +179,7 @@ export class UpworkLiveAdapter implements PlatformAdapter {
     return !!(process.env.UPWORK_CLIENT_ID && process.env.UPWORK_CLIENT_SECRET);
   }
 
-  async connect(uid: string, platform: Platform, authCode?: string): Promise<ConnectedSource> {
+  async connect(uid: string, platform: IncomePlatform, _authCode?: string): Promise<ConnectedSource> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Upwork API credentials (UPWORK_CLIENT_ID/SECRET) are missing in environment.");
     }
@@ -195,9 +195,9 @@ export class UpworkLiveAdapter implements PlatformAdapter {
   }
 
   async fetchTransactions(
-    freelancerId: string,
-    sourceId: string,
-    platform: Platform
+    _freelancerId: string,
+    _sourceId: string,
+    _platform: IncomePlatform
   ): Promise<Transaction[]> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Upwork API credentials are missing in environment.");
@@ -211,6 +211,14 @@ export class UpworkLiveAdapter implements PlatformAdapter {
  * Automatically chooses sandbox vs live based on whether live environment variables exist.
  */
 export function getPlatformAdapter(platform: Platform): PlatformAdapter {
+  // Outflow sources (credit cards) have no income adapter — they are linked and
+  // synced through /api/v1/connectors/credit-card instead. Failing loudly here
+  // prevents a card from ever being handed to a transaction generator.
+  if (!isIncomePlatform(platform)) {
+    throw new Error(
+      `UNSUPPORTED_PLATFORM: ${platform} is an outflow source and cannot be linked as income. Use the credit-card connector.`
+    );
+  }
   if (platform === "PAYONEER" && process.env.PAYONEER_CLIENT_ID) {
     return new PayoneerLiveAdapter();
   }

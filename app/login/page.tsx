@@ -41,7 +41,7 @@ export default function LoginPage() {
       } else {
         router.push("/connect");
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error("Login flow error:", err);
       setError("Invalid email or password. Please try again.");
     } finally {
@@ -119,7 +119,7 @@ export default function LoginPage() {
 
         <div className="text-center mt-6">
           <p className="text-body-sm text-on-surface-variant">
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Link href="/signup" className="text-primary font-bold hover:underline">
               Sign Up
             </Link>

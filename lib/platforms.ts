@@ -1,9 +1,14 @@
 /**
- * Single source of truth for the income-source platforms VaultTrust supports.
+ * Single source of truth for the connector platforms VaultTrust supports.
  *
- * Adding a provider means adding one entry here plus a transaction generator
- * in `adapters.ts` — the API aggregation, consent toggles, chart series and
- * connect-page cards all derive from this list rather than hardcoding names.
+ * Adding an income provider means adding one entry here plus a transaction
+ * generator in `adapters.ts` — the API aggregation, consent toggles, chart
+ * series and connect-page cards all derive from this list.
+ *
+ * IMPORTANT: platforms carry a `kind`. Income math (source mix, monthly
+ * aggregates, IVS diversity) must iterate `INCOME_PLATFORMS`, never
+ * `PLATFORMS` — an outflow source like a credit card would otherwise be
+ * counted as earnings and inflate verified income.
  */
 
 export const PLATFORMS = [
@@ -13,14 +18,22 @@ export const PLATFORMS = [
   "NAYAPAY",
   "JAZZCASH",
   "EASYPAISA",
+  "CREDIT_CARD",
 ] as const;
 
 export type Platform = (typeof PLATFORMS)[number];
 
 /**
+ * Platforms that represent money coming in. Declared explicitly rather than
+ * derived from a runtime filter so the compiler can enforce exhaustiveness on
+ * income-only maps (e.g. the sandbox transaction generators).
+ */
+export type IncomePlatform = Exclude<Platform, "CREDIT_CARD">;
+
+/**
  * How a platform is presented. `category` drives which card layout the
- * connect page uses: the three original sources keep their bespoke cards,
- * and every mobile wallet renders from one shared card component.
+ * connect page uses: the original sources keep their bespoke cards, and every
+ * mobile wallet renders from one shared card component.
  */
 export interface PlatformMeta {
   label: string;
@@ -36,7 +49,9 @@ export interface PlatformMeta {
    * so a class-name map would silently purge to nothing.
    */
   color: string;
-  category: "global" | "bank" | "invoice" | "wallet";
+  category: "global" | "bank" | "invoice" | "wallet" | "credit";
+  /** Whether this source adds to income or represents an obligation. */
+  kind: "income" | "outflow";
 }
 
 export const PLATFORM_META: Record<Platform, PlatformMeta> = {
@@ -47,6 +62,7 @@ export const PLATFORM_META: Record<Platform, PlatformMeta> = {
     consentLabel: "Payoneer income averages",
     color: "#003127",
     category: "global",
+    kind: "income",
   },
   BANK_TRANSFER: {
     label: "Bank Transfer",
@@ -55,6 +71,7 @@ export const PLATFORM_META: Record<Platform, PlatformMeta> = {
     consentLabel: "Direct bank consistency metrics",
     color: "#006a6a",
     category: "bank",
+    kind: "income",
   },
   LOCAL_INVOICING: {
     label: "Local Invoicing",
@@ -63,6 +80,7 @@ export const PLATFORM_META: Record<Platform, PlatformMeta> = {
     consentLabel: "Local invoice growth analysis",
     color: "#735c00",
     category: "invoice",
+    kind: "income",
   },
   NAYAPAY: {
     label: "NayaPay",
@@ -71,6 +89,7 @@ export const PLATFORM_META: Record<Platform, PlatformMeta> = {
     consentLabel: "NayaPay wallet activity",
     color: "#2b6958",
     category: "wallet",
+    kind: "income",
   },
   JAZZCASH: {
     label: "JazzCash",
@@ -79,6 +98,7 @@ export const PLATFORM_META: Record<Platform, PlatformMeta> = {
     consentLabel: "JazzCash wallet activity",
     color: "#93000a",
     category: "wallet",
+    kind: "income",
   },
   EASYPAISA: {
     label: "Easypaisa",
@@ -87,18 +107,67 @@ export const PLATFORM_META: Record<Platform, PlatformMeta> = {
     consentLabel: "Easypaisa wallet activity",
     color: "#0b5041",
     category: "wallet",
+    kind: "income",
+  },
+  CREDIT_CARD: {
+    label: "Credit Card",
+    tagline: "Spending & Repayment Obligations",
+    icon: "credit_card",
+    consentLabel: "Debt-to-income and utilisation ratios",
+    // Deliberately outside the income palette — a neutral plum reads as
+    // "different category" wherever it sits next to earnings colours.
+    color: "#3f3052",
+    category: "credit",
+    kind: "outflow",
   },
 };
+
+/**
+ * Sources that count toward verified income. Use for all income math.
+ *
+ * Spelled out as a literal tuple (rather than a runtime `.filter`) so it can
+ * back a `z.enum()` and so the two assertions below can prove — at compile
+ * time — that it stays exactly in step with `PLATFORMS`/`kind`.
+ */
+export const INCOME_PLATFORMS = [
+  "PAYONEER",
+  "BANK_TRANSFER",
+  "LOCAL_INVOICING",
+  "NAYAPAY",
+  "JAZZCASH",
+  "EASYPAISA",
+] as const satisfies readonly IncomePlatform[];
+
+// `satisfies` above rejects extras; this rejects omissions. Together they mean
+// adding a platform without classifying it is a build error, not a silent bug
+// where new earnings quietly vanish from the source mix.
+type MissingIncomePlatform = Exclude<
+  IncomePlatform,
+  (typeof INCOME_PLATFORMS)[number]
+>;
+const _assertEveryIncomePlatformListed: MissingIncomePlatform extends never
+  ? true
+  : never = true;
+void _assertEveryIncomePlatformListed;
+
+/** Sources that represent obligations rather than earnings. */
+export const OUTFLOW_PLATFORMS = PLATFORMS.filter(
+  (p) => PLATFORM_META[p].kind === "outflow"
+);
 
 /** Platforms rendered by the shared wallet card on the connect page. */
 export const WALLET_PLATFORMS = PLATFORMS.filter(
   (p) => PLATFORM_META[p].category === "wallet"
 );
 
-/** A zeroed accumulator keyed by every platform. */
-export function zeroByPlatform(): Record<Platform, number> {
-  return PLATFORMS.reduce(
+export function isIncomePlatform(p: Platform): p is IncomePlatform {
+  return PLATFORM_META[p].kind === "income";
+}
+
+/** A zeroed accumulator keyed by every income platform. */
+export function zeroByIncomePlatform(): Record<IncomePlatform, number> {
+  return INCOME_PLATFORMS.reduce(
     (acc, p) => ({ ...acc, [p]: 0 }),
-    {} as Record<Platform, number>
+    {} as Record<IncomePlatform, number>
   );
 }

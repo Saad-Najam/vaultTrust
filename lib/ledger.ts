@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import { dbService, ConsentLedgerEntry } from "./db";
 
+/** Opaque, JSON-serialisable body hashed into a ledger entry. */
+export type LedgerPayload = Record<string, unknown>;
+
 /**
  * Computes the SHA-256 hash for a block in the consent ledger.
  * Format: SHA-256(prevHash + JSON.stringify({eventType, consentId, timestamp, payload})).
@@ -11,7 +14,7 @@ export function computeBlockHash(
     eventType: string;
     consentId: string;
     timestamp: string;
-    payload: any;
+    payload: LedgerPayload;
   }
 ): string {
   const input =
@@ -32,7 +35,7 @@ export function computeBlockHash(
 export async function appendLedgerEntry(
   consentId: string,
   eventType: "GRANT" | "SCOPE_CHANGE" | "REVOKE" | "BANK_ACCESS",
-  payload: any
+  payload: LedgerPayload
 ): Promise<ConsentLedgerEntry> {
   const latestEntry = await dbService.getLatestLedgerEntry(consentId);
   const prevHash = latestEntry ? latestEntry.thisHash : "0".repeat(64);
@@ -56,8 +59,8 @@ export async function appendLedgerEntry(
     payloadHash,
     prevHash,
     thisHash,
-    // Add raw payload for verification (saved under a local property)
-    ...({ payload } as any),
+    // Raw payload retained so the chain can be re-verified later.
+    payload,
   };
 
   await dbService.createLedgerEntry(entry);
@@ -85,7 +88,7 @@ export async function verifyLedgerChain(consentId: string): Promise<Verification
   const results: VerificationResult[] = [];
 
   for (const entry of sorted) {
-    const payload = (entry as any).payload || {};
+    const payload = entry.payload || {};
 
     // 1. Recompute SHA-256 block hash
     const computedHash = computeBlockHash(entry.prevHash, {

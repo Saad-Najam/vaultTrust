@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { z } from "zod";
+import { getErrorMessage } from "@/lib/errors";
 
 // Firestore documents are capped at 1MB; keep the stored photo well under
 // that so the rest of the user doc always has room.
@@ -54,10 +55,10 @@ export async function GET(request: Request) {
       photoURL: user.photoURL || null,
       kycStatus: user.kycStatus,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("[Profile Me GET] Error:", error);
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }
@@ -111,7 +112,7 @@ export async function PATCH(request: Request) {
       email: updated?.email,
       photoURL: updated?.photoURL || null,
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("[Profile Me PATCH] Error:", error);
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -120,7 +121,7 @@ export async function PATCH(request: Request) {
       );
     }
     return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
+      { success: false, error: getErrorMessage(error, "Internal Server Error") },
       { status: 500 }
     );
   }
