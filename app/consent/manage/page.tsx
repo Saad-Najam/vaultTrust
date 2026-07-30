@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 
 // First 6 + last 4 characters, per the standard Explorer-link truncation format.
@@ -21,6 +22,7 @@ export default function Page() {
   const [loading, setLoading] = useState(true);
   const [verification, setVerification] = useState<any>(null);
   const [revokeError, setRevokeError] = useState<string | null>(null);
+  const [auditEntries, setAuditEntries] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchActive = async () => {
@@ -30,12 +32,29 @@ export default function Page() {
         if (data.success && data.consent) {
           setActiveConsent(data.consent);
 
-          try {
-            const verifyRes = await fetchWithAuth(`/api/v1/consent/${data.consent.id}/verify`);
-            const verifyData = await verifyRes.json();
-            if (verifyData.success) setVerification(verifyData);
-          } catch (verifyErr) {
-            console.error("Verification check failed:", verifyErr);
+          // Verification and the audit trail are independent of each other;
+          // neither failing should stop the other from rendering.
+          const [verifyRes, trailRes] = await Promise.allSettled([
+            fetchWithAuth(`/api/v1/consent/${data.consent.id}/verify`),
+            fetchWithAuth(`/api/v1/consent/${data.consent.id}/audit-trail`),
+          ]);
+
+          if (verifyRes.status === "fulfilled") {
+            try {
+              const verifyData = await verifyRes.value.json();
+              if (verifyData.success) setVerification(verifyData);
+            } catch (e) {
+              console.error("Verification parse failed:", e);
+            }
+          }
+
+          if (trailRes.status === "fulfilled") {
+            try {
+              const trailData = await trailRes.value.json();
+              if (trailData.success) setAuditEntries(trailData.entries || []);
+            } catch (e) {
+              console.error("Audit trail parse failed:", e);
+            }
           }
         }
       } catch (err) {
@@ -46,6 +65,30 @@ export default function Page() {
     };
     fetchActive();
   }, []);
+
+  /** Ledger event types rendered as human-readable activity labels. */
+  const EVENT_LABELS: Record<string, string> = {
+    GRANT: "Consent granted",
+    SCOPE_CHANGE: "Scope updated",
+    REVOKE: "Consent revoked",
+    BANK_ACCESS: "Data accessed by bank",
+  };
+
+  const formatEventTime = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    const isToday = d.toDateString() === new Date().toDateString();
+    return isToday
+      ? `Today, ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" });
+  };
+
+  // Newest first, capped — this panel is a summary, the full list lives in /audit.
+  const recentActivity = [...auditEntries]
+    .sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    )
+    .slice(0, 4);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -142,9 +185,9 @@ export default function Page() {
       <FreelancerSidebar />
 
       {/*  Main Canvas  */}
-      <main className="ml-72 min-h-screen animate-fade-in">
+      <main className="lg:ml-72 min-h-screen animate-fade-in">
       {/*  Predicted TopAppBar  */}
-      <header className="flex justify-between items-center w-full px-margin-desktop h-16 bg-surface shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sticky top-0 z-40">
+      <header className="flex justify-between items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 bg-surface shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sticky top-0 z-40">
       <div className="flex items-center gap-4">
       <h2 className="text-headline-sm font-headline-sm font-bold text-primary">Consent Management</h2>
       </div>
@@ -152,9 +195,7 @@ export default function Page() {
       <button className="hover:bg-surface-container-high rounded-full p-2 transition-opacity">
       <span className="material-symbols-outlined text-on-surface-variant">notifications</span>
       </button>
-      <div className="w-8 h-8 rounded-full bg-surface-container overflow-hidden border border-outline-variant">
-      <img className="w-full h-full object-cover" data-alt="A professional headshot of a corporate bank administrator wearing a charcoal suit, set against a blurred modern office background with soft teal and mint accents. The lighting is crisp and institutional, conveying authority and security in a modern digital banking environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCXp3aRuaApsWL61-gPb_LdCFhrGA3Ws0KNlLQ7_AH4IeYJrlp0Y3mhb2ncy9ZrXI3fZobQS0BMCO_lFKYAB9SMm00Z26rL74-2Mz9iJHJ0p725wf88t0Sku7bGrXXxtSL6lnBtOmoNBALwofDVYcUCDQ9GdButvBhSqSssqVI8D3wTOPdMTR5CGBMKvXfW_yEHgaAEmLMiOOs5NbKmCH2AQWM_3qEvLTTfmHZs0nLzjP7oYhIoXtsmNg"/>
-      </div>
+      <UserAvatar size="w-8 h-8" />
       </div>
       </header>
       {/*  Content Area  */}
@@ -329,20 +370,19 @@ export default function Page() {
                                   Recent Activity
                               </h5>
       <ul className="space-y-4">
-      <li className="flex gap-3">
-      <div className="w-2 h-2 rounded-full bg-secondary mt-2"></div>
-      <div>
-      <p className="text-body-sm font-semibold">Data ping by UBL</p>
-      <p className="text-label-sm text-on-surface-variant">Today, 10:45 AM</p>
-      </div>
-      </li>
-      <li className="flex gap-3">
-      <div className="w-2 h-2 rounded-full bg-outline-variant mt-2"></div>
-      <div>
-      <p className="text-body-sm font-semibold">Consent Renewed</p>
-      <p className="text-label-sm text-on-surface-variant">14 Nov 2023</p>
-      </div>
-      </li>
+      {recentActivity.length === 0 ? (
+        <li className="text-label-sm text-on-surface-variant">No ledger activity recorded yet.</li>
+      ) : (
+        recentActivity.map((entry: any) => (
+        <li key={entry.id} className="flex gap-3">
+        <div className={`w-2 h-2 rounded-full mt-2 ${entry.verified === false ? "bg-error" : "bg-secondary"}`}></div>
+        <div>
+        <p className="text-body-sm font-semibold">{EVENT_LABELS[entry.eventType] || entry.eventType}</p>
+        <p className="text-label-sm text-on-surface-variant">{formatEventTime(entry.timestamp)}</p>
+        </div>
+        </li>
+        ))
+      )}
       </ul>
       </div>
       </div>

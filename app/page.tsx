@@ -288,15 +288,10 @@ export default function Page() {
                                   Secure, consent-based income verification for Pakistani freelancers. Access formal banking services using your verifiable digital history.
                                </p>
               <div className="flex flex-col sm:flex-row gap-stack-md mt-4">
-              <Link href="/dashboard">
+              <Link href="/signup">
                 <button className="bg-primary text-on-primary px-8 py-4 rounded-xl font-label-md text-lg hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center justify-center gap-2 group">
                     Get started as a freelancer
                     <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
-                </button>
-              </Link>
-              <Link href="/lending">
-                <button className="bg-surface-container-highest/50 border border-outline/20 text-primary px-8 py-4 rounded-xl font-label-md text-lg hover:bg-surface-container-highest transition-colors flex items-center justify-center">
-                    View bank portal
                 </button>
               </Link>
               </div>

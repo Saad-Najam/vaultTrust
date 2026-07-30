@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 
 export default function Page() {
@@ -125,9 +126,9 @@ export default function Page() {
       <FreelancerSidebar />
 
       {/*  Main Content Canvas  */}
-      <main className="ml-64 flex-1 overflow-y-auto bg-surface relative animate-fade-in">
+      <main className="lg:ml-64 flex-1 overflow-y-auto bg-surface relative animate-fade-in">
       {/*  TopAppBar  */}
-      <header className="flex justify-between items-center w-full px-margin-desktop h-16 bg-surface-container-lowest shadow-sm sticky top-0 z-30">
+      <header className="flex justify-between items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 bg-surface-container-lowest shadow-sm sticky top-0 z-30">
       <h2 className="text-headline-sm font-headline-sm font-bold text-primary">Success Status</h2>
       <div className="flex items-center gap-4">
       <button className="hover:bg-surface-container-high rounded-full p-2 transition-colors">
@@ -136,9 +137,7 @@ export default function Page() {
       <button className="hover:bg-surface-container-high rounded-full p-2 transition-colors">
       <span className="material-symbols-outlined text-primary">verified</span>
       </button>
-      <div className="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden">
-      <img className="w-full h-full object-cover" data-alt="A professional headshot of a smiling freelancer in their mid-30s, looking confidently at the camera against a clean, softly lit office background. The lighting is bright and modern, adhering to an institutional modernism aesthetic with high clarity and cool neutral tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBm4iLZ61u5ClwnXmFmZ1A-ndG5f7-7WkCKyv9sqKxcvQGDGn2DvNYI27YNP7tSN0isplD_PxYgZu7pK5ekqLYS2nWJhl4bt5li8GgJo1px1rhQusL1kZKlbPfdNMI4Ymk9H_xqk5zgJ2bUPJCttad8tzYPgNtgOl6SaTpDZgoAct3Sa8gnrgjhWehx9v8QiHPZfSkCG1QXU_iQaL5AoGw8uoZ3vxQ09r7hgxKoyIZNSrwtvZ0jhTBJlA"/>
-      </div>
+      <UserAvatar size="w-8 h-8" />
       </div>
       </header>
       {consent ? (

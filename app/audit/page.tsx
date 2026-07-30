@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 
 export default function Page() {
@@ -97,7 +98,7 @@ export default function Page() {
       <FreelancerSidebar />
 
       {/*  Predicted Component: TopAppBar  */}
-      <header className="flex justify-between items-center w-full px-margin-desktop h-16 ml-64 max-w-[calc(100%-16rem)] bg-surface-container-lowest dark:bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] fixed top-0 z-40">
+      <header className="flex justify-between items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 lg:ml-64 lg:max-w-[calc(100%-16rem)] bg-surface-container-lowest dark:bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] fixed top-0 z-40">
       <div className="flex items-center gap-4">
       <span className="text-headline-sm font-headline-sm font-bold text-primary dark:text-primary-fixed">Audit Ledger</span>
       
@@ -117,13 +118,11 @@ export default function Page() {
       <button className="hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full p-2 transition-opacity active:opacity-80">
       <span className="material-symbols-outlined text-on-surface-variant" data-icon="notifications">notifications</span>
       </button>
-      <div className="h-8 w-8 rounded-full overflow-hidden border border-outline-variant">
-      <img className="w-full h-full object-cover" data-alt="A professional headshot of a young freelancer with a clean, modern aesthetic. Soft studio lighting illuminates the subject against a neutral, high-key background. The overall style is institutional yet approachable, featuring high-quality portrait photography with a slight corporate polish." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBVC4906PfUvLry-CHSmbAQ4FknjQr-ltLUB4bgKqLlwUHtJs1ZrgbdO3p0D0gSUtIuwDZ6701rY_5nyLwAUNev_DiPyzxHCarusIrfjXRAdIBSAlThFMDBdTtFgt0e2HEG95lFWvh2ANMKOGskIn3-RSIrs1hNI3QOP4RRl1GIBCPuOtKGyQqrH4wk-1sMmIMo9zVNtQONyyRmEJHepS_P5KUhb3nfPGVQ-fE0k7h5u68yANg7c4H9-w"/>
-      </div>
+      <UserAvatar size="w-8 h-8" />
       </div>
       </header>
       {/*  Main Content Canvas  */}
-      <main className="ml-64 mt-16 p-stack-lg min-h-screen flex gap-stack-lg bg-surface animate-fade-in">
+      <main className="lg:ml-64 mt-16 p-5 lg:p-stack-lg min-h-screen flex flex-col lg:flex-row gap-stack-lg bg-surface animate-fade-in">
       {/*  Audit Timeline & Table Section  */}
       <div className="flex-grow space-y-6">
       <div className="glass-card bg-surface-container-lowest rounded-[24px] shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden">

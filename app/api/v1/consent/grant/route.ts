@@ -4,10 +4,11 @@ import { verifyAuthToken } from "@/lib/auth_helper";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { isRateLimited } from "@/lib/rate_limiter";
 import { grantConsent as grantConsentOnChain } from "@/lib/blockchain/client/consent-client";
+import { PLATFORMS } from "@/lib/platforms";
 import { z } from "zod";
 
 const GrantConsentSchema = z.object({
-  sources: z.array(z.enum(["PAYONEER", "BANK_TRANSFER", "LOCAL_INVOICING"])),
+  sources: z.array(z.enum(PLATFORMS)),
   scope: z.string().optional().default("ALL"),
   duration: z.enum(["ONE_TIME", "ROLLING_6MO"]).optional(),
   scopeDuration: z.enum(["ONE_TIME", "ROLLING_6MO"]).optional(),

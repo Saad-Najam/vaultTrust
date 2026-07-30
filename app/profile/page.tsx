@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 
 export default function Page() {
@@ -91,17 +92,15 @@ export default function Page() {
     <>
       <FreelancerSidebar />
       {/*  Main Content Canvas  */}
-      <main className="ml-64 min-h-screen animate-fade-in">
+      <main className="lg:ml-64 min-h-screen animate-fade-in">
       {/*  TopAppBar Execution  */}
-      <header className="flex justify-between items-center w-full px-margin-desktop h-16 bg-surface-container-lowest dark:bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sticky top-0 z-40">
+      <header className="flex justify-between items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 bg-surface-container-lowest dark:bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sticky top-0 z-40">
       <h2 className="text-headline-sm font-headline-sm font-bold text-primary">Income Profile</h2>
       <div className="flex items-center gap-4">
       <button className="hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full p-2 transition-opacity active:opacity-80">
       <span className="material-symbols-outlined text-on-surface-variant">notifications</span>
       </button>
-      <div className="h-8 w-8 rounded-full bg-primary-fixed overflow-hidden ring-2 ring-primary/10">
-      <img className="w-full h-full object-cover" data-alt="A professional close-up portrait of a freelancer in their late 20s, with a soft-focus office background. The lighting is clean and institutional, with a calm, trust-evoking expression. The image color palette matches the deep greens and mint tones of the VaultTrust brand for a cohesive identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuASpHMZOEB8JHuADjq8shr6na23FCYrctTdBpgoBmmWSnoMggSmjRGIIzJQ_9VQ9rdGRZCEpEkyVNGemErNxH-yFyzFjKuLJyNg85YFdNwvlArMSTcCnKIwgI_WZZkuzIobWajCilYaSHwnMqZdPfmqh7AGFDEywyw2TqbnEEPkPjGSQoWHYvqexn2Ehz7kTD-4TqeDo40764nGi8X2SJLAf0ScZkXiMloxDvtprqoWo5inKQuXPdKKWQ"/>
-      </div>
+      <UserAvatar size="w-8 h-8" />
       </div>
       </header>
       {/*  Canvas Body  */}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { normalizeAmountToPKR } from "@/lib/scoring";
+import { PLATFORMS, Platform, zeroByPlatform } from "@/lib/platforms";
 
 /**
  * GET /api/v1/connectors/summary
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
     const connectedSourceIds = new Set(
       allSources.filter((s) => s.status === "CONNECTED").map((s) => s.id)
     );
+    const platformBySourceId = new Map(allSources.map((s) => [s.id, s.platform]));
     const activeTransactions = transactions.filter((t) =>
       connectedSourceIds.has(t.sourceId)
     );
@@ -53,9 +55,7 @@ export async function GET(request: Request) {
         year: d.getFullYear(),
         month: d.getMonth(),
         totalPKR: 0,
-        payoneerPKR: 0,
-        bankPKR: 0,
-        invoicePKR: 0,
+        byPlatform: zeroByPlatform(),
       };
     });
 
@@ -72,59 +72,68 @@ export async function GET(request: Request) {
       if (monthIdx >= 0 && monthIdx < 6) {
         monthlyAggregates[monthIdx].totalPKR += amountPKR;
 
-        const platform = allSources.find((s) => s.id === tx.sourceId)?.platform;
-        if (platform === "PAYONEER") {
-          monthlyAggregates[monthIdx].payoneerPKR += amountPKR;
-        } else if (platform === "BANK_TRANSFER") {
-          monthlyAggregates[monthIdx].bankPKR += amountPKR;
-        } else if (platform === "LOCAL_INVOICING") {
-          monthlyAggregates[monthIdx].invoicePKR += amountPKR;
+        const platform = platformBySourceId.get(tx.sourceId);
+        if (platform) {
+          monthlyAggregates[monthIdx].byPlatform[platform] += amountPKR;
         }
       }
     });
 
-    // Compute source mix percentages normalized to PKR across all 6 months
+    // Source mix percentages, normalized to PKR across all 6 months. Keyed by
+    // platform so a new provider needs no change here or in the consumers.
+    const platformTotals = zeroByPlatform();
     let totalAllMonthsPKR = 0;
-    let payoneerTotal = 0;
-    let bankTotal = 0;
-    let invoiceTotal = 0;
 
     monthlyAggregates.forEach((m) => {
       totalAllMonthsPKR += m.totalPKR;
-      payoneerTotal += m.payoneerPKR;
-      bankTotal += m.bankPKR;
-      invoiceTotal += m.invoicePKR;
+      PLATFORMS.forEach((p) => {
+        platformTotals[p] += m.byPlatform[p];
+      });
     });
 
-    const sourceMix = {
-      payoneerPercent:
-        totalAllMonthsPKR > 0
-          ? Math.round((payoneerTotal / totalAllMonthsPKR) * 100)
-          : 0,
-      bankPercent:
-        totalAllMonthsPKR > 0
-          ? Math.round((bankTotal / totalAllMonthsPKR) * 100)
-          : 0,
-      invoicePercent:
-        totalAllMonthsPKR > 0
-          ? Math.round((invoiceTotal / totalAllMonthsPKR) * 100)
-          : 0,
-    };
+    const sourceMix = PLATFORMS.reduce(
+      (acc, p) => ({
+        ...acc,
+        [p]:
+          totalAllMonthsPKR > 0
+            ? Math.round((platformTotals[p] / totalAllMonthsPKR) * 100)
+            : 0,
+      }),
+      {} as Record<Platform, number>
+    );
 
     const currentMonthAgg = monthlyAggregates[5]; // Most recent month bucket
     const totalTransactions = activeTransactions.length;
 
+    // Per-source record counts, so each card can show its own real total
+    // instead of a hardcoded figure. Counted over all transactions (not just
+    // CONNECTED ones) so a disconnected source still reports retained data.
+    const countBySourceId = new Map<string, number>();
+    transactions.forEach((t) => {
+      countBySourceId.set(t.sourceId, (countBySourceId.get(t.sourceId) || 0) + 1);
+    });
+
+    // Distinct payers across connected sources — replaces what used to be a
+    // decorative "+21" badge on the connect page with a real figure.
+    const distinctClientCount = new Set(
+      activeTransactions.map((t) => t.clientLabel).filter(Boolean)
+    ).size;
+
     return NextResponse.json({
       success: true,
       userId,
-      connectedSources: allSources,
+      connectedSources: allSources.map((s) => ({
+        ...s,
+        transactionCount: countBySourceId.get(s.id) || 0,
+      })),
       recentTransactions,
       monthlyAggregates: monthlyAggregates.map((m) => ({
         ...m,
         totalPKR: Math.round(m.totalPKR),
-        payoneerPKR: Math.round(m.payoneerPKR),
-        bankPKR: Math.round(m.bankPKR),
-        invoicePKR: Math.round(m.invoicePKR),
+        byPlatform: PLATFORMS.reduce(
+          (acc, p) => ({ ...acc, [p]: Math.round(m.byPlatform[p]) }),
+          {} as Record<Platform, number>
+        ),
       })),
       sourceMix,
       incomeScore: incomeScore
@@ -141,6 +150,7 @@ export async function GET(request: Request) {
         ? Math.round(currentMonthAgg.totalPKR)
         : 0,
       totalTransactions,
+      distinctClientCount,
     });
   } catch (error: any) {
     console.error("[Summary GET] Error:", error);

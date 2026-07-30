@@ -3,11 +3,12 @@ import { dbService, Consent } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { appendLedgerEntry } from "@/lib/ledger";
 import { updateConsent as updateConsentOnChain } from "@/lib/blockchain/client/consent-client";
+import { PLATFORMS } from "@/lib/platforms";
 import { z } from "zod";
 
 const UpdateConsentSchema = z.object({
   consentId: z.string().optional(),
-  sources: z.array(z.enum(["PAYONEER", "BANK_TRANSFER", "LOCAL_INVOICING"])),
+  sources: z.array(z.enum(PLATFORMS)),
   scope: z.string().min(1),
   duration: z.enum(["ONE_TIME", "ROLLING_6MO"]),
   purpose: z.string().min(1),

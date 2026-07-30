@@ -5,24 +5,35 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import UserAvatar from "@/components/UserAvatar";
+import { PLATFORMS, PLATFORM_META, Platform } from "@/lib/platforms";
 
 export default function Page() {
   const router = useRouter();
-  const [sources, setSources] = useState({
-    PAYONEER: true,
-    BANK_TRANSFER: true,
-    LOCAL_INVOICING: false,
-  });
+  // Default on for the two the freelancer almost always has; the rest opt-in.
+  const [sources, setSources] = useState<Record<Platform, boolean>>(
+    () =>
+      PLATFORMS.reduce(
+        (acc, p) => ({
+          ...acc,
+          [p]: p === "PAYONEER" || p === "BANK_TRANSFER",
+        }),
+        {} as Record<Platform, boolean>
+      )
+  );
   const [duration, setDuration] = useState<"ONE_TIME" | "ROLLING_6MO">("ROLLING_6MO");
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleToggle = (platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING") => {
+  const handleToggle = (platform: Platform) => {
     setSources((prev) => ({
       ...prev,
       [platform]: !prev[platform],
     }));
   };
+
+  const sharedPlatforms = PLATFORMS.filter((p) => sources[p]);
+  const withheldPlatforms = PLATFORMS.filter((p) => !sources[p]);
 
   const handleGrant = async () => {
     setLoading(true);
@@ -181,89 +192,45 @@ export default function Page() {
               {/*  Data Sources Selection  */}
               <section className="space-y-stack-md">
               <h2 className="text-label-md font-label-md text-outline uppercase tracking-widest mb-2">Select Data Sources</h2>
-              {/*  Source 1  */}
-              <label className="flex items-center justify-between p-stack-md bg-surface-container-lowest rounded-[24px] border border-outline-variant/30 active:scale-[0.98] transition-transform cursor-pointer">
+              {PLATFORMS.map((platform) => {
+              const meta = PLATFORM_META[platform];
+              return (
+              <label key={platform} className="flex items-center justify-between p-stack-md bg-surface-container-lowest rounded-[24px] border border-outline-variant/30 active:scale-[0.98] transition-transform cursor-pointer">
               <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center">
-              <span className="material-symbols-outlined text-secondary" data-icon="account_balance">account_balance</span>
+              <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: `${meta.color}1a` }}>
+              <span className="material-symbols-outlined" style={{ color: meta.color }}>{meta.icon}</span>
               </div>
               <div>
-              <p className="text-body-md font-bold text-on-surface">Transaction History</p>
-              <p className="text-label-sm font-label-sm text-on-surface-variant">Past 12 months activity</p>
+              <p className="text-body-md font-bold text-on-surface">{meta.label}</p>
+              <p className="text-label-sm font-label-sm text-on-surface-variant">{meta.tagline}</p>
               </div>
               </div>
               <div className="relative inline-block w-12 h-6 transition duration-200 ease-in">
-              <input checked={sources.PAYONEER} onChange={() => handleToggle("PAYONEER")} className="toggle-checkbox absolute block w-0 h-0 opacity-0" type="checkbox"/>
+              <input checked={sources[platform]} onChange={() => handleToggle(platform)} className="toggle-checkbox absolute block w-0 h-0 opacity-0" type="checkbox"/>
               <div className="toggle-slot block w-full h-full bg-outline-variant rounded-full transition-colors duration-200">
               <div className="toggle-dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200"></div>
               </div>
               </div>
               </label>
-              {/*  Source 2  */}
-              <label className="flex items-center justify-between p-stack-md bg-surface-container-lowest rounded-[24px] border border-outline-variant/30 active:scale-[0.98] transition-transform cursor-pointer">
-              <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center">
-              <span className="material-symbols-outlined text-secondary" data-icon="payments">payments</span>
-              </div>
-              <div>
-              <p className="text-body-md font-bold text-on-surface">Income Proof</p>
-              <p className="text-label-sm font-label-sm text-on-surface-variant">Verified payroll deposits</p>
-              </div>
-              </div>
-              <div className="relative inline-block w-12 h-6 transition duration-200 ease-in">
-              <input checked={sources.BANK_TRANSFER} onChange={() => handleToggle("BANK_TRANSFER")} className="toggle-checkbox absolute block w-0 h-0 opacity-0" type="checkbox"/>
-              <div className="toggle-slot block w-full h-full bg-outline-variant rounded-full transition-colors duration-200">
-              <div className="toggle-dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200"></div>
-              </div>
-              </div>
-              </label>
-              {/*  Source 3 (Off by default)  */}
-              <label className="flex items-center justify-between p-stack-md bg-surface-container-lowest rounded-[24px] border border-outline-variant/30 active:scale-[0.98] transition-transform cursor-pointer">
-              <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-secondary-container/20 flex items-center justify-center">
-              <span className="material-symbols-outlined text-secondary" data-icon="home_storage">home_storage</span>
-              </div>
-              <div>
-              <p className="text-body-md font-bold text-on-surface">Asset Portfolio</p>
-              <p className="text-label-sm font-label-sm text-on-surface-variant">Stocks and cryptofunds</p>
-              </div>
-              </div>
-              <div className="relative inline-block w-12 h-6 transition duration-200 ease-in">
-              <input checked={sources.LOCAL_INVOICING} onChange={() => handleToggle("LOCAL_INVOICING")} className="toggle-checkbox absolute block w-0 h-0 opacity-0" type="checkbox"/>
-              <div className="toggle-slot block w-full h-full bg-outline-variant rounded-full transition-colors duration-200">
-              <div className="toggle-dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform duration-200"></div>
-              </div>
-              </div>
-              </label>
+              );
+              })}
               </section>
               {/*  Summary Section  */}
               <section className="mt-stack-lg p-stack-md bg-surface-container-low rounded-[24px]">
               <h3 className="text-label-md font-label-md text-on-surface mb-stack-sm">Consent Summary</h3>
               <div className="space-y-3">
-              {sources.BANK_TRANSFER && (
-                <div className="flex items-center gap-3">
+              {sharedPlatforms.map((platform) => (
+                <div key={platform} className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-primary text-[18px]" style={{"fontVariationSettings":"'FILL' 1"}}>check_circle</span>
-                <p className="text-body-sm font-body-sm text-on-surface-variant">Sharing <span className="font-bold text-primary">Bank Records</span></p>
+                <p className="text-body-sm font-body-sm text-on-surface-variant">Sharing <span className="font-bold text-primary">{PLATFORM_META[platform].label}</span></p>
                 </div>
-              )}
-              {sources.PAYONEER && (
-                <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-primary text-[18px]" style={{"fontVariationSettings":"'FILL' 1"}}>check_circle</span>
-                <p className="text-body-sm font-body-sm text-on-surface-variant">Sharing <span className="font-bold text-primary">Payoneer Records</span></p>
-                </div>
-              )}
-              {sources.LOCAL_INVOICING && (
-                <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-primary text-[18px]" style={{"fontVariationSettings":"'FILL' 1"}}>check_circle</span>
-                <p className="text-body-sm font-body-sm text-on-surface-variant">Sharing <span className="font-bold text-primary">Local Invoices</span></p>
-                </div>
-              )}
-              {!sources.LOCAL_INVOICING && (
-                <div className="flex items-center gap-3">
+              ))}
+              {withheldPlatforms.map((platform) => (
+                <div key={platform} className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-outline text-[18px]">cancel</span>
-                <p className="text-body-sm font-body-sm text-outline">NOT sharing <span className="font-bold">Local Invoices</span></p>
+                <p className="text-body-sm font-body-sm text-outline">NOT sharing <span className="font-bold">{PLATFORM_META[platform].label}</span></p>
                 </div>
-              )}
+              ))}
               </div>
               <div className="mt-4 pt-4 border-t border-outline-variant/30">
               <div className="flex items-center gap-2 text-tertiary">
@@ -311,9 +278,7 @@ export default function Page() {
               <div className="hover:bg-surface-container-high rounded-full p-2 cursor-pointer transition-colors">
               <span className="material-symbols-outlined text-on-surface-variant">notifications</span>
               </div>
-              <div className="w-10 h-10 rounded-full border-2 border-primary-container/20 overflow-hidden">
-              <img className="w-full h-full object-cover" data-alt="A professional headshot of a young creative freelancer in a brightly lit, modern home office. The lighting is soft and natural, emphasizing a clean light-mode aesthetic with teal and deep green accents in the background. The individual is smiling warmly, looking directly at the camera, projecting a sense of reliability and trust for a secure financial platform." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCgBikTX1C-PHALwiDFnTXlBV98xvpyyOUaVmxBNhmQu5RfE2xsHxYzf0i84dKd1xlZTwSS-JNijTC56HXzxrxbikNn7LZ12sKoSDmr5ajTD2gHugFJO11ehWFukVnHDaWxZuAYCNl5bmge77nMha_c7bnigQfvGuFnu1V40FNs5bYdSnSv6j7URbYPm5p8h_zG5PGWA9BCR6r-EmmgUU1Nx8_y6hIk2awEdBT3KqVR2tgv9LTDhszvmw"/>
-              </div>
+              <UserAvatar size="w-10 h-10" />
               </div>
               </header>
               {/*  Main Content Canvas  */}
@@ -348,47 +313,23 @@ export default function Page() {
                                           Data Permissions
                                       </h3>
               <div className="space-y-stack-lg">
-              {/*  Share Payoneer Summary  */}
+              {PLATFORMS.map((platform, idx) => (
+              <React.Fragment key={platform}>
+              {idx > 0 && <hr className="border-outline-variant/30"/>}
               <div className="flex items-start justify-between group">
               <div className="flex-grow pr-4">
-              <p className="text-body-md font-bold text-on-surface">Share Payoneer summary</p>
+              <p className="text-body-md font-bold text-on-surface">Share {PLATFORM_META[platform].label} summary</p>
               <p className="text-body-sm font-body-sm text-on-surface-variant mt-1">Only aggregated monthly totals are shared, not raw transactions.</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
-              <input checked={sources.PAYONEER} onChange={() => handleToggle("PAYONEER")} className="sr-only permission-toggle" type="checkbox"/>
-              <div className={`w-11 h-6 rounded-full transition-colors relative ${sources.PAYONEER ? 'bg-primary' : 'bg-surface-container-highest'}`}>
-              <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${sources.PAYONEER ? 'left-6' : 'left-1'}`}></div>
+              <input checked={sources[platform]} onChange={() => handleToggle(platform)} className="sr-only permission-toggle" type="checkbox"/>
+              <div className={`w-11 h-6 rounded-full transition-colors relative ${sources[platform] ? 'bg-primary' : 'bg-surface-container-highest'}`}>
+              <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${sources[platform] ? 'left-6' : 'left-1'}`}></div>
               </div>
               </label>
               </div>
-              <hr className="border-outline-variant/30"/>
-              {/*  Share Bank Transfer Summary  */}
-              <div className="flex items-start justify-between group">
-              <div className="flex-grow pr-4">
-              <p className="text-body-md font-bold text-on-surface">Share bank transfer summary</p>
-              <p className="text-body-sm font-body-sm text-on-surface-variant mt-1">Only aggregated monthly totals are shared, not raw transactions.</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-              <input checked={sources.BANK_TRANSFER} onChange={() => handleToggle("BANK_TRANSFER")} className="sr-only permission-toggle" type="checkbox"/>
-              <div className={`w-11 h-6 rounded-full transition-colors relative ${sources.BANK_TRANSFER ? 'bg-primary' : 'bg-surface-container-highest'}`}>
-              <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${sources.BANK_TRANSFER ? 'left-6' : 'left-1'}`}></div>
-              </div>
-              </label>
-              </div>
-              <hr className="border-outline-variant/30"/>
-              {/*  Share Invoice Summary  */}
-              <div className="flex items-start justify-between group">
-              <div className="flex-grow pr-4">
-              <p className="text-body-md font-bold text-on-surface">Share invoice summary</p>
-              <p className="text-body-sm font-body-sm text-on-surface-variant mt-1">Only aggregated monthly totals are shared, not raw transactions.</p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-              <input checked={sources.LOCAL_INVOICING} onChange={() => handleToggle("LOCAL_INVOICING")} className="sr-only permission-toggle" type="checkbox"/>
-              <div className={`w-11 h-6 rounded-full transition-colors relative ${sources.LOCAL_INVOICING ? 'bg-primary' : 'bg-surface-container-highest'}`}>
-              <div className={`absolute top-1 bg-white w-4 h-4 rounded-full transition-transform ${sources.LOCAL_INVOICING ? 'left-6' : 'left-1'}`}></div>
-              </div>
-              </label>
-              </div>
+              </React.Fragment>
+              ))}
               </div>
               </div>
               {/*  Duration Selection  */}
@@ -430,24 +371,12 @@ export default function Page() {
               <div className="space-y-3">
               <p className="text-label-sm font-label-sm text-primary uppercase tracking-widest">Shared with UBL</p>
               <ul className="space-y-2">
-              {sources.PAYONEER && (
-                <li className="flex items-center gap-3">
+              {sharedPlatforms.map((platform) => (
+                <li key={platform} className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-primary text-sm">check_circle</span>
-                <span className="text-body-sm font-body-sm">Payoneer income averages</span>
+                <span className="text-body-sm font-body-sm">{PLATFORM_META[platform].consentLabel}</span>
                 </li>
-              )}
-              {sources.BANK_TRANSFER && (
-                <li className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-primary text-sm">check_circle</span>
-                <span className="text-body-sm font-body-sm">Direct Bank consistency metrics</span>
-                </li>
-              )}
-              {sources.LOCAL_INVOICING && (
-                <li className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-primary text-sm">check_circle</span>
-                <span className="text-body-sm font-body-sm">Local Invoice growth analysis</span>
-                </li>
-              )}
+              ))}
               <li className="flex items-center gap-3">
               <span className="material-symbols-outlined text-[#D4AF37] text-sm" style={{"fontVariationSettings":"'FILL' 1"}}>stars</span>
               <span className="text-body-sm font-body-sm font-bold">IVS Score (Verification Grade)</span>
@@ -467,12 +396,12 @@ export default function Page() {
               <span className="material-symbols-outlined text-error text-sm">cancel</span>
               <span className="text-body-sm font-body-sm text-on-surface-variant">Private client names</span>
               </li>
-              {!sources.LOCAL_INVOICING && (
-                <li className="flex items-center gap-3">
+              {withheldPlatforms.map((platform) => (
+                <li key={platform} className="flex items-center gap-3">
                 <span className="material-symbols-outlined text-error text-sm">cancel</span>
-                <span className="text-body-sm font-body-sm text-on-surface-variant">Local invoice details</span>
+                <span className="text-body-sm font-body-sm text-on-surface-variant">{PLATFORM_META[platform].consentLabel}</span>
                 </li>
-              )}
+              ))}
               </ul>
               </div>
               {/*  CTA Actions  */}

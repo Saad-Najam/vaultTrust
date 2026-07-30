@@ -55,11 +55,12 @@ export default function SignupPage() {
       await user.getIdToken(true);
       console.log(`[Signup] Registration final, role claim loaded: ${role}`);
 
-      // 5. Redirect based on role
+      // 5. Redirect based on role. New freelancers land on Connected Accounts
+      //    so their first step is linking an income source.
       if (role === "BANK_OFFICER") {
         router.push("/lending");
       } else {
-        router.push("/dashboard");
+        router.push("/connect");
       }
     } catch (err: any) {
       console.error("Signup flow error:", err);

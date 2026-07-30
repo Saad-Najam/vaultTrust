@@ -39,7 +39,7 @@ export default function LoginPage() {
       if (role === "BANK_OFFICER") {
         router.push("/lending");
       } else {
-        router.push("/dashboard");
+        router.push("/connect");
       }
     } catch (err: any) {
       console.error("Login flow error:", err);

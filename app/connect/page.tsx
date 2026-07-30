@@ -3,17 +3,26 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import {
+  PLATFORMS,
+  PLATFORM_META,
+  WALLET_PLATFORMS,
+  Platform,
+} from "@/lib/platforms";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ConnectedSource {
   id: string;
   freelancerId: string;
-  platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING";
+  platform: Platform;
   status: "CONNECTED" | "DISCONNECTED";
   connectedAt: string;
   provider: string;
+  lastSyncedAt?: string | null;
+  transactionCount?: number;
 }
 
 interface IncomeScore {
@@ -25,16 +34,13 @@ interface IncomeScore {
   computedAt: string;
 }
 
-interface SourceMix {
-  payoneerPercent: number;
-  bankPercent: number;
-  invoicePercent: number;
-}
+type SourceMix = Record<Platform, number>;
 
 interface SummaryData {
   sourceMix: SourceMix | null;
   incomeScore: IncomeScore | null;
   totalTransactions: number;
+  distinctClientCount: number;
 }
 
 // ─── Small helper components ──────────────────────────────────────────────────
@@ -62,6 +68,20 @@ function Spinner() {
       />
     </svg>
   );
+}
+
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return "Never";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "Never";
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? "" : "s"} ago`;
+  const diffHours = Math.round(diffMin / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
+  const diffDays = Math.round(diffHours / 24);
+  return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
 }
 
 function InlineError({ message }: { message: string }) {
@@ -103,6 +123,123 @@ function TrendBadge({ trend }: { trend: "GROWING" | "STABLE" | "DECLINING" }) {
   );
 }
 
+/**
+ * Uniform card for the mobile-wallet providers. The three original sources
+ * keep their bespoke layouts; every wallet renders from this one component so
+ * adding a provider is a registry entry rather than another block of JSX.
+ */
+function WalletSourceCard({
+  platform,
+  source,
+  connecting,
+  disconnecting,
+  error,
+  onLink,
+  onDisconnect,
+}: {
+  platform: Platform;
+  source?: ConnectedSource;
+  connecting: boolean;
+  disconnecting: boolean;
+  error: string;
+  onLink: () => void;
+  onDisconnect: (sourceId: string) => void;
+}) {
+  const meta = PLATFORM_META[platform];
+  const isConnected = !!source;
+
+  return (
+    <div className="md:col-span-12 lg:col-span-4 bg-white rounded-[24px] p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border border-surface-container-high flex flex-col gap-stack-md hover:shadow-lg transition-all duration-300">
+      <div className="flex items-start justify-between">
+        <div
+          className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: `${meta.color}1a` }}
+        >
+          <span
+            className="material-symbols-outlined text-2xl"
+            style={{ color: meta.color }}
+          >
+            {meta.icon}
+          </span>
+        </div>
+        <span
+          className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase ${
+            isConnected
+              ? "bg-[#E8F5E9] text-primary"
+              : "bg-surface-container-high text-on-surface-variant"
+          }`}
+        >
+          {isConnected ? "Active" : "Inactive"}
+        </span>
+      </div>
+
+      <div>
+        <h4 className="text-headline-sm font-headline-sm mb-1">{meta.label}</h4>
+        <p className="text-label-sm text-on-surface-variant uppercase tracking-wider">
+          {meta.tagline}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex justify-between text-label-sm">
+          <span className="text-on-surface-variant">Transactions</span>
+          <span className="font-bold">{source?.transactionCount ?? 0} records</span>
+        </div>
+        <div className="flex justify-between text-label-sm">
+          <span className="text-on-surface-variant">Last synced</span>
+          <span className="font-bold">{formatRelativeTime(source?.lastSyncedAt)}</span>
+        </div>
+      </div>
+
+      <div className="mt-auto">
+        {isConnected ? (
+          <div className="flex gap-2">
+            <button
+              className="flex-1 py-3 bg-[#E8F5E9] text-primary rounded-xl font-bold flex items-center justify-center gap-2 cursor-default"
+              disabled
+            >
+              Linked
+              <span className="material-symbols-outlined text-[18px]">done</span>
+            </button>
+            <button
+              onClick={() => onDisconnect(source!.id)}
+              disabled={disconnecting}
+              className="px-4 py-3 border-2 border-outline text-on-surface-variant rounded-xl font-bold flex items-center gap-2 hover:border-error hover:text-error transition-colors disabled:opacity-50"
+              title={`Disconnect ${meta.label}`}
+            >
+              {disconnecting ? (
+                <Spinner />
+              ) : (
+                <span className="material-symbols-outlined text-[18px]">link_off</span>
+              )}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onLink}
+            disabled={connecting}
+            className="w-full py-3 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-95 disabled:opacity-60"
+            style={{ backgroundColor: meta.color }}
+          >
+            {connecting ? (
+              <>
+                <Spinner />
+                Connecting…
+              </>
+            ) : (
+              <>
+                Connect
+                <span className="material-symbols-outlined text-[18px]">add</span>
+              </>
+            )}
+          </button>
+        )}
+        <InlineError message={error} />
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Page() {
@@ -112,11 +249,14 @@ export default function Page() {
     sourceMix: null,
     incomeScore: null,
     totalTransactions: 0,
+    distinctClientCount: 0,
   });
 
   // Per-source loading states
   const [connectingSource, setConnectingSource] = useState<string | null>(null);
   const [disconnectingSource, setDisconnectingSource] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // Per-source inline error messages keyed by platform
   const [errorBySource, setErrorBySource] = useState<Record<string, string>>({});
@@ -133,6 +273,7 @@ export default function Page() {
           sourceMix: data.sourceMix || null,
           incomeScore: data.incomeScore || null,
           totalTransactions: data.totalTransactions || 0,
+          distinctClientCount: data.distinctClientCount || 0,
         });
       }
     } catch (err) {
@@ -145,6 +286,31 @@ export default function Page() {
   useEffect(() => {
     fetchSources();
   }, []);
+
+  /** Re-pulls transactions from the provider, then refreshes the view. */
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncError(null);
+    try {
+      const res = await fetchWithAuth("/api/v1/connectors/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setSyncError(
+          typeof data.error === "string" ? data.error : "Sync failed. Please try again."
+        );
+      }
+      await fetchSources();
+    } catch (err) {
+      console.error("[ConnectPage] handleSync error:", err);
+      setSyncError("Network error. Please try again.");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -186,6 +352,14 @@ export default function Page() {
   const handleDisconnect = async (sourceId: string, platform: string) => {
     setDisconnectingSource(sourceId);
     clearError(platform);
+
+    // Optimistically hide the connection immediately so the button doesn't
+    // appear to do nothing while the request is in flight; revert on failure.
+    const previousSources = sources;
+    setSources((prev) =>
+      prev.map((s) => (s.id === sourceId ? { ...s, status: "DISCONNECTED" } : s))
+    );
+
     try {
       const res = await fetchWithAuth("/api/v1/connectors/link", {
         method: "DELETE",
@@ -196,6 +370,7 @@ export default function Page() {
       if (data.success) {
         await fetchSources();
       } else {
+        setSources(previousSources);
         const msg =
           typeof data.error === "string"
             ? data.error
@@ -204,6 +379,7 @@ export default function Page() {
       }
     } catch (err) {
       console.error("[ConnectPage] handleDisconnect error:", err);
+      setSources(previousSources);
       setErrorBySource((prev) => ({
         ...prev,
         [platform]: "Network error. Please try again.",
@@ -215,15 +391,13 @@ export default function Page() {
 
   // ── Derived state ─────────────────────────────────────────────────────────────
 
-  const payoneerSource = sources.find(
-    (s) => s.platform === "PAYONEER" && s.status === "CONNECTED"
-  );
-  const bankSource = sources.find(
-    (s) => s.platform === "BANK_TRANSFER" && s.status === "CONNECTED"
-  );
-  const invoiceSource = sources.find(
-    (s) => s.platform === "LOCAL_INVOICING" && s.status === "CONNECTED"
-  );
+  /** The CONNECTED source for a platform, if any. */
+  const sourceFor = (platform: Platform) =>
+    sources.find((s) => s.platform === platform && s.status === "CONNECTED");
+
+  const payoneerSource = sourceFor("PAYONEER");
+  const bankSource = sourceFor("BANK_TRANSFER");
+  const invoiceSource = sourceFor("LOCAL_INVOICING");
 
   const isPayoneerConnected = !!payoneerSource;
   const isBankConnected = !!bankSource;
@@ -242,7 +416,7 @@ export default function Page() {
       <FreelancerSidebar />
 
       {/*  TopAppBar Shell  */}
-      <header className="flex justify-between items-center w-full px-margin-desktop h-16 ml-64 max-w-[calc(100%-16rem)] fixed top-0 bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] z-40">
+      <header className="flex justify-between items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 lg:ml-64 lg:max-w-[calc(100%-16rem)] fixed top-0 bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] z-40">
         <div className="flex items-center gap-4">
           <h2 className="text-headline-sm font-headline-sm font-bold text-primary">
             Connected Accounts
@@ -260,18 +434,12 @@ export default function Page() {
               verified
             </span>
           </button>
-          <div className="w-10 h-10 rounded-full bg-surface-container border-2 border-primary-container overflow-hidden">
-            <img
-              className="w-full h-full object-cover"
-              data-alt="A professional high-resolution headshot of a smiling freelancer in a bright modern home office. The lighting is warm and natural coming from a large window. The aesthetic is clean and institutional modern, with a soft-focus background of tech gadgets and books, emphasizing trust and professionalism in a light-mode corporate palette."
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-9-rD2LSkhXLM3X1npe117GheEoafYDMs7tA10JT6IxH1s1rS6vqQS4ZAfpkoaq2ZhebZuc3x-cvIBYkbFOLcGHkIt93dAzs70jhsYyHuSh0rPn-ElfVmvECBUt01_N-nmUa6dngvRyEi4Ks5imSNMJSxgxrx4be0uxKzzMZD3yatW16CHJdHEY-dA3W5TwFbzgBNefmNhlCGuPfpKPjLxtNbWIQSJvE6aqPRHzLGoRK9pQXrNjBGBg"
-            />
-          </div>
+          <UserAvatar size="w-10 h-10" showName />
         </div>
       </header>
 
       {/*  Main Content Canvas  */}
-      <main className="ml-64 pt-24 pb-stack-lg px-margin-desktop min-h-screen animate-fade-in">
+      <main className="lg:ml-64 pt-24 pb-stack-lg px-5 lg:px-margin-desktop min-h-screen animate-fade-in">
         <div className="max-w-container-max mx-auto">
 
           {/*  Header Section  */}
@@ -326,25 +494,22 @@ export default function Page() {
                   <div className="p-stack-md bg-surface-container-low rounded-xl">
                     <p className="text-label-sm text-on-surface-variant mb-1">Last Synced</p>
                     <p className="text-body-md font-bold text-on-surface">
-                      {isPayoneerConnected ? "Today, 10:45 AM" : "Never"}
+                      {formatRelativeTime(payoneerSource?.lastSyncedAt)}
                     </p>
                   </div>
                   <div className="p-stack-md bg-surface-container-low rounded-xl">
                     <p className="text-label-sm text-on-surface-variant mb-1">Total Transactions</p>
                     <p className="text-body-md font-bold text-on-surface">
-                      {isPayoneerConnected ? "12 Syncable Items" : "0 Items"}
+                      {payoneerSource?.transactionCount ?? 0} Items
                     </p>
                   </div>
                 </div>
                 <div className="mt-auto">
                   <div className="flex justify-between items-center">
-                    <div className="flex -space-x-2">
-                      <div className="w-8 h-8 rounded-full border-2 border-white bg-primary-fixed" />
-                      <div className="w-8 h-8 rounded-full border-2 border-white bg-secondary-fixed" />
-                      <div className="w-8 h-8 rounded-full border-2 border-white bg-tertiary-fixed" />
-                      <div className="w-8 h-8 rounded-full border-2 border-white bg-surface-container-highest flex items-center justify-center text-[10px] font-bold">
-                        +21
-                      </div>
+                    <div className="flex items-center gap-2 text-label-sm text-on-surface-variant">
+                      <span className="material-symbols-outlined text-[18px]">groups</span>
+                      {summaryData.distinctClientCount}{" "}
+                      {summaryData.distinctClientCount === 1 ? "payer" : "payers"} identified
                     </div>
                     <div className="flex items-center gap-2">
                       {isPayoneerConnected ? (
@@ -418,19 +583,21 @@ export default function Page() {
                 </div>
                 <h4 className="text-headline-sm font-headline-sm mb-1">UBL Bank Account</h4>
                 <p className="text-body-sm text-on-surface-variant mb-6">
-                  Savings Account ****9281
+                  {bankSource
+                    ? `${PLATFORM_META.BANK_TRANSFER.tagline} · ${bankSource.provider}`
+                    : PLATFORM_META.BANK_TRANSFER.tagline}
                 </p>
                 <div className="space-y-3 mb-8">
                   <div className="flex justify-between text-label-sm">
                     <span className="text-on-surface-variant">Transactions</span>
                     <span className="font-bold">
-                      {isBankConnected ? "12 records" : "0 records"}
+                      {bankSource?.transactionCount ?? 0} records
                     </span>
                   </div>
                   <div className="flex justify-between text-label-sm">
-                    <span className="text-on-surface-variant">Last activity</span>
+                    <span className="text-on-surface-variant">Last synced</span>
                     <span className="font-bold">
-                      {isBankConnected ? "2 hours ago" : "Never"}
+                      {formatRelativeTime(bankSource?.lastSyncedAt)}
                     </span>
                   </div>
                 </div>
@@ -438,11 +605,24 @@ export default function Page() {
               <div>
                 {isBankConnected ? (
                   <div className="flex gap-2">
-                    <button className="flex-1 py-3 border-2 border-secondary text-secondary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-secondary hover:text-on-secondary transition-all active:scale-95">
-                      Sync now
-                      <span className="material-symbols-outlined text-[18px] group-hover:rotate-180 transition-transform duration-500">
-                        sync
-                      </span>
+                    <button
+                      onClick={handleSync}
+                      disabled={syncing}
+                      className="flex-1 py-3 border-2 border-secondary text-secondary rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-secondary hover:text-on-secondary transition-all active:scale-95 disabled:opacity-60"
+                    >
+                      {syncing ? (
+                        <>
+                          <Spinner />
+                          Syncing…
+                        </>
+                      ) : (
+                        <>
+                          Sync now
+                          <span className="material-symbols-outlined text-[18px] group-hover:rotate-180 transition-transform duration-500">
+                            sync
+                          </span>
+                        </>
+                      )}
                     </button>
                     <button
                       onClick={() =>
@@ -478,9 +658,23 @@ export default function Page() {
                     )}
                   </button>
                 )}
-                <InlineError message={errorBySource["BANK_TRANSFER"] || ""} />
+                <InlineError message={syncError || errorBySource["BANK_TRANSFER"] || ""} />
               </div>
             </div>
+
+            {/*  Cards: mobile wallets (NayaPay / JazzCash / Easypaisa)  */}
+            {WALLET_PLATFORMS.map((platform) => (
+              <WalletSourceCard
+                key={platform}
+                platform={platform}
+                source={sourceFor(platform)}
+                connecting={connectingSource === platform}
+                disconnecting={disconnectingSource === sourceFor(platform)?.id}
+                error={errorBySource[platform] || ""}
+                onLink={() => handleLink(platform)}
+                onDisconnect={(id) => handleDisconnect(id, platform)}
+              />
+            ))}
 
             {/*  Card: Local Invoicing  */}
             <div className="md:col-span-12 lg:col-span-6 bg-surface-container-lowest rounded-[24px] p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] border-2 border-dashed border-outline-variant flex items-center gap-stack-lg group hover:border-primary/50 transition-colors">
@@ -658,66 +852,37 @@ export default function Page() {
                       <p className="text-label-md font-bold text-on-surface-variant uppercase tracking-wider">
                         Income Source Mix (6-month, PKR)
                       </p>
-                      {/* Payoneer bar */}
-                      <div>
-                        <div className="flex justify-between text-label-sm mb-1">
-                          <span className="flex items-center gap-1.5 font-medium">
-                            <span className="material-symbols-outlined text-[14px] text-primary">
-                              account_balance_wallet
-                            </span>
-                            Payoneer
-                          </span>
-                          <span className="font-bold text-primary">
-                            {sourceMix.payoneerPercent}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-surface-container-high rounded-full h-2.5 overflow-hidden">
-                          <div
-                            className="h-2.5 rounded-full bg-primary transition-all duration-700"
-                            style={{ width: `${sourceMix.payoneerPercent}%` }}
-                          />
-                        </div>
-                      </div>
-                      {/* Bank bar */}
-                      <div>
-                        <div className="flex justify-between text-label-sm mb-1">
-                          <span className="flex items-center gap-1.5 font-medium">
-                            <span className="material-symbols-outlined text-[14px] text-secondary">
-                              account_balance
-                            </span>
-                            Bank Transfer
-                          </span>
-                          <span className="font-bold text-secondary">
-                            {sourceMix.bankPercent}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-surface-container-high rounded-full h-2.5 overflow-hidden">
-                          <div
-                            className="h-2.5 rounded-full bg-secondary transition-all duration-700"
-                            style={{ width: `${sourceMix.bankPercent}%` }}
-                          />
-                        </div>
-                      </div>
-                      {/* Invoice bar */}
-                      <div>
-                        <div className="flex justify-between text-label-sm mb-1">
-                          <span className="flex items-center gap-1.5 font-medium">
-                            <span className="material-symbols-outlined text-[14px] text-tertiary">
-                              cloud_upload
-                            </span>
-                            Local Invoicing
-                          </span>
-                          <span className="font-bold text-tertiary">
-                            {sourceMix.invoicePercent}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-surface-container-high rounded-full h-2.5 overflow-hidden">
-                          <div
-                            className="h-2.5 rounded-full bg-tertiary transition-all duration-700"
-                            style={{ width: `${sourceMix.invoicePercent}%` }}
-                          />
-                        </div>
-                      </div>
+                      {PLATFORMS.map((platform) => {
+                        const meta = PLATFORM_META[platform];
+                        const percent = sourceMix[platform] ?? 0;
+                        return (
+                          <div key={platform}>
+                            <div className="flex justify-between text-label-sm mb-1">
+                              <span className="flex items-center gap-1.5 font-medium">
+                                <span
+                                  className="material-symbols-outlined text-[14px]"
+                                  style={{ color: meta.color }}
+                                >
+                                  {meta.icon}
+                                </span>
+                                {meta.label}
+                              </span>
+                              <span className="font-bold" style={{ color: meta.color }}>
+                                {percent}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-surface-container-high rounded-full h-2.5 overflow-hidden">
+                              <div
+                                className="h-2.5 rounded-full transition-all duration-700"
+                                style={{
+                                  width: `${percent}%`,
+                                  backgroundColor: meta.color,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
                       <p className="text-label-sm text-on-surface-variant mt-1">
                         All amounts normalized to PKR using fixed FX rates
                         (USD×280, EUR×300).

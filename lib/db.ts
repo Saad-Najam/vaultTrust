@@ -1,4 +1,7 @@
 import { getAdminFirestore } from "./firebase_admin";
+import { Platform } from "./platforms";
+
+export type { Platform };
 
 // Define Interfaces matching production specifications
 export interface User {
@@ -8,6 +11,7 @@ export interface User {
   role: "FREELANCER" | "BANK_OFFICER";
   kycStatus: "NOT_STARTED" | "SIMULATED_PASS" | "VERIFIED" | "FAILED";
   createdAt: string;
+  photoURL?: string;
 }
 
 export interface FreelancerProfile {
@@ -20,10 +24,14 @@ export interface FreelancerProfile {
 export interface ConnectedSource {
   id: string; // e.g. platform name or uuid
   freelancerId: string;
-  platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING";
+  platform: Platform;
   status: "CONNECTED" | "DISCONNECTED";
   connectedAt: string;
   provider: "sandbox" | "live";
+  // Last time transactions were actually pulled from the provider for this
+  // source — stamped on connect and on every explicit sync, so the UI can
+  // show a real age rather than the time the page happened to load.
+  lastSyncedAt?: string;
 }
 
 export interface Transaction {
@@ -40,7 +48,7 @@ export interface Consent {
   id: string; // freelancerId_bankId
   freelancerId: string;
   bankId: string;
-  sources: ("PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING")[];
+  sources: Platform[];
   scope: string;
   duration: "ONE_TIME" | "ROLLING_6MO";
   purpose: string;
@@ -93,6 +101,14 @@ export const dbService = {
   async updateUser(id: string, fields: Partial<User>): Promise<void> {
     const firestore = getAdminFirestore();
     await firestore.collection("users").doc(id).update(fields);
+  },
+
+  // Merge-write variant used by self-service profile edits. `update()` throws
+  // NOT_FOUND when the doc is missing (e.g. an auth account whose registration
+  // half-completed), which would leave that user unable to fix their profile.
+  async upsertUser(id: string, fields: Partial<User>): Promise<void> {
+    const firestore = getAdminFirestore();
+    await firestore.collection("users").doc(id).set(fields, { merge: true });
   },
 
   async listUsers(): Promise<User[]> {

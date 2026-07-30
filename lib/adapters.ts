@@ -1,19 +1,82 @@
 import { ConnectedSource, Transaction } from "./db";
-import crypto from "crypto";
+import { Platform } from "./platforms";
 
 export interface PlatformAdapter {
-  connect(
-    uid: string,
-    platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING",
-    authCode?: string
-  ): Promise<ConnectedSource>;
-  
+  connect(uid: string, platform: Platform, authCode?: string): Promise<ConnectedSource>;
+
   fetchTransactions(
     freelancerId: string,
     sourceId: string,
-    platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING"
+    platform: Platform
   ): Promise<Transaction[]>;
 }
+
+/**
+ * Per-platform shape of the generated sandbox history: two inflows a month,
+ * each a base amount plus jitter, in the platform's natural currency.
+ *
+ * Transaction ids are derived from a stable slug + month index so a re-sync
+ * overwrites the same records rather than appending duplicates.
+ */
+interface SandboxProfile {
+  slug: string;
+  currency: string;
+  entries: [
+    { base: number; jitter: number; day: number; label: string },
+    { base: number; jitter: number; day: number; label: string },
+  ];
+}
+
+const SANDBOX_PROFILES: Record<Platform, SandboxProfile> = {
+  PAYONEER: {
+    slug: "pay",
+    currency: "USD",
+    entries: [
+      { base: 800, jitter: 400, day: 5, label: "Upwork Escrow Disbursement" },
+      { base: 450, jitter: 200, day: 20, label: "Fiverr Ltd Payout" },
+    ],
+  },
+  BANK_TRANSFER: {
+    slug: "bank",
+    currency: "PKR",
+    entries: [
+      { base: 60000, jitter: 20000, day: 10, label: "Habib Bank IBFT Inward" },
+      { base: 40000, jitter: 15000, day: 25, label: "SCB Pakistan Salary Inward" },
+    ],
+  },
+  LOCAL_INVOICING: {
+    slug: "inv",
+    currency: "PKR",
+    entries: [
+      { base: 30000, jitter: 10000, day: 12, label: "Inv #2908 Tech Solutions" },
+      { base: 25000, jitter: 10000, day: 27, label: "Inv #2909 Apex Design Studio" },
+    ],
+  },
+  NAYAPAY: {
+    slug: "npy",
+    currency: "PKR",
+    entries: [
+      { base: 35000, jitter: 15000, day: 8, label: "NayaPay Wallet Inflow" },
+      { base: 20000, jitter: 10000, day: 22, label: "NayaPay Raast Transfer" },
+    ],
+  },
+  JAZZCASH: {
+    slug: "jzc",
+    currency: "PKR",
+    entries: [
+      { base: 28000, jitter: 12000, day: 6, label: "JazzCash Wallet Inflow" },
+      { base: 18000, jitter: 9000, day: 19, label: "JazzCash Merchant Settlement" },
+    ],
+  },
+  EASYPAISA: {
+    slug: "ezp",
+    currency: "PKR",
+    entries: [
+      { base: 26000, jitter: 11000, day: 9, label: "Easypaisa Wallet Inflow" },
+      { base: 16000, jitter: 8000, day: 24, label: "Easypaisa Merchant Payout" },
+    ],
+  },
+};
 
 /**
  * Sandbox Platform Adapter generating realistic 6-month transaction data.
@@ -21,7 +84,7 @@ export interface PlatformAdapter {
 export class SandboxAdapter implements PlatformAdapter {
   async connect(
     uid: string,
-    platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING",
+    platform: Platform,
     authCode?: string
   ): Promise<ConnectedSource> {
     const id = `${uid}_${platform.toLowerCase()}`;
@@ -38,80 +101,30 @@ export class SandboxAdapter implements PlatformAdapter {
   async fetchTransactions(
     freelancerId: string,
     sourceId: string,
-    platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING"
+    platform: Platform
   ): Promise<Transaction[]> {
+    const profile = SANDBOX_PROFILES[platform];
+    if (!profile) return [];
+
     const transactions: Transaction[] = [];
     const now = new Date();
 
-    // Helper to generate transaction mock dates matching month offsets
-    const getTxDate = (monthsAgo: number, day: number) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - monthsAgo, day);
-      return d.toISOString();
-    };
+    const getTxDate = (monthsAgo: number, day: number) =>
+      new Date(now.getFullYear(), now.getMonth() - monthsAgo, day).toISOString();
 
-    // Generate 6 months of historical transactions (2-3 transactions per month)
+    // 6 months of history, two inflows per month.
     for (let month = 0; month < 6; month++) {
-      if (platform === "PAYONEER") {
-        // Freelance payments from Upwork/Fiverr (in USD)
+      profile.entries.forEach((entry, idx) => {
         transactions.push({
-          id: `tx_sb_pay_${month}_1`,
+          id: `tx_sb_${profile.slug}_${month}_${idx + 1}`,
           sourceId,
           freelancerId,
-          amount: 800 + Math.round(Math.random() * 400),
-          currency: "USD",
-          date: getTxDate(month, 5),
-          clientLabel: "Upwork Escrow Disbursement",
+          amount: entry.base + Math.round(Math.random() * entry.jitter),
+          currency: profile.currency,
+          date: getTxDate(month, entry.day),
+          clientLabel: entry.label,
         });
-        transactions.push({
-          id: `tx_sb_pay_${month}_2`,
-          sourceId,
-          freelancerId,
-          amount: 450 + Math.round(Math.random() * 200),
-          currency: "USD",
-          date: getTxDate(month, 20),
-          clientLabel: "Fiverr Ltd Payout",
-        });
-      } else if (platform === "BANK_TRANSFER") {
-        // Direct local client wire transfers (in PKR)
-        transactions.push({
-          id: `tx_sb_bank_${month}_1`,
-          sourceId,
-          freelancerId,
-          amount: 60000 + Math.round(Math.random() * 20000),
-          currency: "PKR",
-          date: getTxDate(month, 10),
-          clientLabel: "Habib Bank IBFT Inward",
-        });
-        transactions.push({
-          id: `tx_sb_bank_${month}_2`,
-          sourceId,
-          freelancerId,
-          amount: 40000 + Math.round(Math.random() * 15000),
-          currency: "PKR",
-          date: getTxDate(month, 25),
-          clientLabel: "SCB Pakistan Salary Inward",
-        });
-      } else if (platform === "LOCAL_INVOICING") {
-        // Local client billing (in PKR)
-        transactions.push({
-          id: `tx_sb_inv_${month}_1`,
-          sourceId,
-          freelancerId,
-          amount: 30000 + Math.round(Math.random() * 10000),
-          currency: "PKR",
-          date: getTxDate(month, 12),
-          clientLabel: "Inv #2908 Tech Solutions",
-        });
-        transactions.push({
-          id: `tx_sb_inv_${month}_2`,
-          sourceId,
-          freelancerId,
-          amount: 25000 + Math.round(Math.random() * 10000),
-          currency: "PKR",
-          date: getTxDate(month, 27),
-          clientLabel: "Inv #2909 Apex Design Studio",
-        });
-      }
+      });
     }
 
     return transactions;
@@ -130,11 +143,7 @@ export class PayoneerLiveAdapter implements PlatformAdapter {
     );
   }
 
-  async connect(
-    uid: string,
-    platform: "PAYONEER",
-    authCode?: string
-  ): Promise<ConnectedSource> {
+  async connect(uid: string, platform: Platform, authCode?: string): Promise<ConnectedSource> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Payoneer Live API credentials (PAYONEER_CLIENT_ID/SECRET) are missing in environment.");
     }
@@ -152,7 +161,7 @@ export class PayoneerLiveAdapter implements PlatformAdapter {
   async fetchTransactions(
     freelancerId: string,
     sourceId: string,
-    platform: "PAYONEER"
+    platform: Platform
   ): Promise<Transaction[]> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Payoneer Live API credentials are missing in environment.");
@@ -167,17 +176,10 @@ export class PayoneerLiveAdapter implements PlatformAdapter {
  */
 export class UpworkLiveAdapter implements PlatformAdapter {
   private isConfigured(): boolean {
-    return !!(
-      process.env.UPWORK_CLIENT_ID &&
-      process.env.UPWORK_CLIENT_SECRET
-    );
+    return !!(process.env.UPWORK_CLIENT_ID && process.env.UPWORK_CLIENT_SECRET);
   }
 
-  async connect(
-    uid: string,
-    platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING",
-    authCode?: string
-  ): Promise<ConnectedSource> {
+  async connect(uid: string, platform: Platform, authCode?: string): Promise<ConnectedSource> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Upwork API credentials (UPWORK_CLIENT_ID/SECRET) are missing in environment.");
     }
@@ -195,7 +197,7 @@ export class UpworkLiveAdapter implements PlatformAdapter {
   async fetchTransactions(
     freelancerId: string,
     sourceId: string,
-    platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING"
+    platform: Platform
   ): Promise<Transaction[]> {
     if (!this.isConfigured()) {
       throw new Error("NOT_CONFIGURED: Upwork API credentials are missing in environment.");
@@ -208,7 +210,7 @@ export class UpworkLiveAdapter implements PlatformAdapter {
  * Factory to retrieve the active PlatformAdapter.
  * Automatically chooses sandbox vs live based on whether live environment variables exist.
  */
-export function getPlatformAdapter(platform: "PAYONEER" | "BANK_TRANSFER" | "LOCAL_INVOICING"): PlatformAdapter {
+export function getPlatformAdapter(platform: Platform): PlatformAdapter {
   if (platform === "PAYONEER" && process.env.PAYONEER_CLIENT_ID) {
     return new PayoneerLiveAdapter();
   }

@@ -4,10 +4,12 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import { useCurrentUser } from "@/lib/use_current_user";
 
 export default function Page() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const { name } = useCurrentUser();
 
   const handleOnboard = async () => {
     setLoading(true);
@@ -157,7 +159,7 @@ export default function Page() {
       <img className="w-full h-full object-cover" data-alt="A professional headshot of a young South Asian man with short dark hair and a friendly smile, dressed in a smart casual navy blazer, against a clean studio background with soft cinematic lighting, evoking a sense of trust and professionalism for a financial portal." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdEfBnaUvlNQ_MZtj4n6_-qkLXgzMJFFU5Oeu-swiLPSHr9E0Twih3bdW78wh8CMN8Z1d6HUG08eEt_zbosw5Nm3-w5ZeEMoE94KX3QP_nOynehpY2GSfz6qNFbYogXcROni0mo40Z4P7ej3_ADuOtva_pDa1T93cRn8qwi8B0KEDvGYe8iTQzHXsKBAUBQhk947c7QVQrNGYmIuf4AnQoSMbsJmApfIsWC0eb7A1S8ZnrcFKIdjQ2_A"/>
       </div>
       <div>
-      <h1 className="text-headline-md font-headline-md text-primary">Welcome, Ahmed Raza</h1>
+      <h1 className="text-headline-md font-headline-md text-primary">Welcome{name ? `, ${name}` : ""}</h1>
       <p className="text-body-md font-body-md text-on-surface-variant">Freelance Web Developer • Lahore</p>
       </div>
       </div>

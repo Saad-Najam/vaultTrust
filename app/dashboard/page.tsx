@@ -5,12 +5,21 @@ import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import { normalizeAmountToPKR } from "@/lib/scoring";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import { useCurrentUser } from "@/lib/use_current_user";
+import { PLATFORMS, PLATFORM_META } from "@/lib/platforms";
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() || "").join("");
+}
 
 export default function Page() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<any>(null);
   const [reliability, setReliability] = useState<any>(null);
   const [consent, setConsent] = useState<any>(null);
+  const { photoURL } = useCurrentUser();
 
   useEffect(() => {
     const loadData = async () => {
@@ -98,11 +107,18 @@ export default function Page() {
   const maxTotal = Math.max(...monthlyAggregates.map((m: any) => m.totalPKR), 1);
   const connectedSourcesCount = summary?.connectedSources?.filter((s: any) => s.status === "CONNECTED").length || 0;
 
+  // Only chart/legend the platforms this freelancer actually earned through,
+  // so the legend doesn't list six providers for someone using two.
+  const activePlatforms = PLATFORMS.filter((p) =>
+    monthlyAggregates.some((m: any) => (m.byPlatform?.[p] || 0) > 0)
+  );
+  const sourceMix = summary?.sourceMix || {};
+
   return (
     <>
       <FreelancerSidebar />
       {/*  TopAppBar Component  */}
-      <header className="flex justify-between items-center w-full px-margin-desktop h-16 ml-64 max-w-[calc(100%-16rem)] fixed top-0 bg-surface-container-lowest dark:bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] z-40">
+      <header className="flex justify-between items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 lg:ml-64 lg:max-w-[calc(100%-16rem)] fixed top-0 bg-surface-container-lowest dark:bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] z-40">
       <div className="flex items-center gap-4">
       <span className="text-headline-sm font-headline-sm font-bold text-primary dark:text-primary-fixed">VaultTrust</span>
       </div>
@@ -117,17 +133,23 @@ export default function Page() {
       </button>
       </div>
       <div className="h-8 w-[1px] bg-outline-variant"></div>
-      <div className="flex items-center gap-3">
+      <Link href="/settings" title="Edit profile" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
       <div className="text-right hidden sm:block">
-      <p className="text-label-md font-label-md text-on-surface">{reliability?.userName || "Ahmed Raza"}</p>
+      <p className="text-label-md font-label-md text-on-surface">{reliability?.userName || "Freelancer"}</p>
       <p className="text-label-sm font-label-sm text-on-surface-variant">Verified Freelancer</p>
       </div>
-      <img className="w-10 h-10 rounded-full border-2 border-primary-fixed-dim object-cover" data-alt="A professional headshot of a young South Asian male freelancer, smiling warmly, wearing a crisp navy blazer over a white shirt, against a soft-focus minimalist office background with institutional modernism lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA1ldjxntAmT-euIz_rJIZk-7m15v3MXxWPH1LSAwOUCA5Xl9C9jsCLaWyAXDOGoAV4u5XJKY0dRWr93oBbcuiumaQBngqXLtLAegN-aROuqPTAEvN6htJf6RdTFcU1zLi3AAF9HiKkJBBkYlKSZyvwmE6qe4ZMgJMuQskWsY8nRTydFJRI2IpQcnAoBGqKGb0ZjvHpfXtBmozh4KqxXpWhB42Sd0Vvwj5BztenhTEsfb9TmSfubVyCwA"/>
+      <div className="w-10 h-10 rounded-full border-2 border-primary-fixed-dim overflow-hidden bg-primary-container flex items-center justify-center flex-shrink-0">
+      {photoURL ? (
+        <img className="w-full h-full object-cover" src={photoURL} alt={reliability?.userName || "Profile photo"} />
+      ) : (
+        <span className="text-on-primary-container font-bold text-label-sm">{getInitials(reliability?.userName || "Freelancer")}</span>
+      )}
       </div>
+      </Link>
       </div>
       </header>
       {/*  Main Content Canvas  */}
-      <main className="ml-64 mt-16 p-stack-lg min-h-screen animate-fade-in">
+      <main className="lg:ml-64 mt-16 p-5 lg:p-stack-lg min-h-screen animate-fade-in">
       <div className="max-w-container-max mx-auto space-y-8">
       {/*  Welcome Header  */}
       <section className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -236,10 +258,13 @@ export default function Page() {
       <h4 className="text-headline-sm font-headline-sm text-primary">Income Stream Analysis</h4>
       <p className="text-body-sm text-on-surface-variant">Last 6 months comparison</p>
       </div>
-      <div className="flex items-center gap-4 text-label-sm">
-      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-primary"></span> Payoneer</div>
-      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-secondary"></span> Direct Bank</div>
-      <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-tertiary"></span> Invoices</div>
+      <div className="flex items-center gap-3 text-label-sm flex-wrap justify-end">
+      {activePlatforms.map((platform) => (
+        <div key={platform} className="flex items-center gap-1.5">
+        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: PLATFORM_META[platform].color }}></span>
+        {PLATFORM_META[platform].label}
+        </div>
+      ))}
       </div>
       </div>
       <div className="h-64 flex items-end justify-between gap-4 group">
@@ -248,37 +273,32 @@ export default function Page() {
         const total = month.totalPKR;
         const heightPercent = Math.max(10, Math.round((total / maxTotal) * 100));
         
-        const payoneerH = total > 0 ? (month.payoneerPKR / total) * 100 : 0;
-        const bankH = total > 0 ? (month.bankPKR / total) * 100 : 0;
-        const invoiceH = total > 0 ? (month.invoicePKR / total) * 100 : 0;
+        const byPlatform = month.byPlatform || {};
 
         return (
           <div key={idx} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
-            <div 
-              className="w-full flex flex-col-reverse gap-0.5" 
+            <div
+              className="w-full flex flex-col-reverse gap-0.5"
               style={{ height: `${heightPercent}%` }}
             >
-              {month.payoneerPKR > 0 && (
-                <div 
-                  className={`bg-primary rounded-sm hover:opacity-80 transition-all cursor-pointer ${isCurrent ? 'rounded-t shadow-lg' : ''}`} 
-                  style={{ height: `${payoneerH}%` }} 
-                  title={`Payoneer: PKR ${Math.round(month.payoneerPKR).toLocaleString()}`}
-                ></div>
-              )}
-              {month.bankPKR > 0 && (
-                <div 
-                  className="bg-secondary rounded-sm hover:opacity-80 transition-all cursor-pointer" 
-                  style={{ height: `${bankH}%` }} 
-                  title={`Direct Bank: PKR ${Math.round(month.bankPKR).toLocaleString()}`}
-                ></div>
-              )}
-              {month.invoicePKR > 0 && (
-                <div 
-                  className="bg-tertiary rounded-sm hover:opacity-80 transition-all cursor-pointer" 
-                  style={{ height: `${invoiceH}%` }} 
-                  title={`Local Invoices: PKR ${Math.round(month.invoicePKR).toLocaleString()}`}
-                ></div>
-              )}
+              {PLATFORMS.map((platform, pIdx) => {
+                const amount = byPlatform[platform] || 0;
+                if (amount <= 0) return null;
+                const meta = PLATFORM_META[platform];
+                return (
+                  <div
+                    key={platform}
+                    className={`rounded-sm hover:opacity-80 transition-all cursor-pointer ${
+                      isCurrent && pIdx === 0 ? "rounded-t shadow-lg" : ""
+                    }`}
+                    style={{
+                      height: `${(amount / total) * 100}%`,
+                      backgroundColor: meta.color,
+                    }}
+                    title={`${meta.label}: PKR ${Math.round(amount).toLocaleString()}`}
+                  ></div>
+                );
+              })}
             </div>
             <span className={`text-label-sm ${isCurrent ? 'font-bold text-primary' : 'text-on-surface-variant'}`}>
               {month.monthLabel}
@@ -296,9 +316,29 @@ export default function Page() {
       {/*  Custom SVG Doughnut  */}
       <svg className="w-48 h-48 transform -rotate-90">
       <circle cx="96" cy="96" fill="transparent" r="80" stroke="#ebeef3" strokeWidth="18"></circle>
-      <circle className="transition-all duration-1000" cx="96" cy="96" fill="transparent" r="80" stroke="#003127" strokeDasharray="502" strokeDashoffset="150" strokeWidth="18"></circle>
-      <circle className="transition-all duration-1000" cx="96" cy="96" fill="transparent" r="80" stroke="#006a6a" strokeDasharray="502" strokeDashoffset="400" strokeWidth="18"></circle>
-      <circle className="transition-all duration-1000" cx="96" cy="96" fill="transparent" r="80" stroke="#735c00" strokeDasharray="502" strokeDashoffset="480" strokeWidth="18"></circle>
+      {(() => {
+        const C = 2 * Math.PI * 80;
+        let offset = 0;
+        return activePlatforms.map((platform) => {
+          const arc = ((sourceMix[platform] || 0) / 100) * C;
+          const el = (
+            <circle
+              key={platform}
+              className="transition-all duration-1000"
+              cx="96"
+              cy="96"
+              fill="transparent"
+              r="80"
+              stroke={PLATFORM_META[platform].color}
+              strokeDasharray={`${arc} ${C - arc}`}
+              strokeDashoffset={-offset}
+              strokeWidth="18"
+            ></circle>
+          );
+          offset += arc;
+          return el;
+        });
+      })()}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
       <span className="text-headline-md font-headline-md">{connectedSourcesCount}</span>
@@ -306,18 +346,21 @@ export default function Page() {
       </div>
       </div>
       <div className="mt-8 space-y-3">
-      <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-primary"></span><span className="text-body-sm">Global Payoneer</span></div>
-      <span className="text-label-md font-bold">{summary?.sourceMix?.payoneerPercent || 0}%</span>
-      </div>
-      <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-secondary"></span><span className="text-body-sm">Enterprise Direct Bank</span></div>
-      <span className="text-label-md font-bold">{summary?.sourceMix?.bankPercent || 0}%</span>
-      </div>
-      <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-tertiary"></span><span className="text-body-sm">Local Retainer Invoices</span></div>
-      <span className="text-label-md font-bold">{summary?.sourceMix?.invoicePercent || 0}%</span>
-      </div>
+      {activePlatforms.length === 0 ? (
+        <p className="text-body-sm text-on-surface-variant text-center">
+        Connect an income source to see your mix.
+        </p>
+      ) : (
+        activePlatforms.map((platform) => (
+          <div key={platform} className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PLATFORM_META[platform].color }}></span>
+          <span className="text-body-sm">{PLATFORM_META[platform].label}</span>
+          </div>
+          <span className="text-label-md font-bold">{sourceMix[platform] || 0}%</span>
+          </div>
+        ))
+      )}
       </div>
       </div>
       </section>

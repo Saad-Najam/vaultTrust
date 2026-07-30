@@ -2,46 +2,18 @@ import { NextResponse } from "next/server";
 import { dbService } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth_helper";
 import { getPlatformAdapter } from "@/lib/adapters";
-import { computeIncomeScore } from "@/lib/scoring";
+import { recomputeAndPersistScore, toScoreResponse } from "@/lib/score_service";
+import { PLATFORMS } from "@/lib/platforms";
 import { z } from "zod";
 
 const linkSchema = z.object({
-  platform: z.enum(["PAYONEER", "BANK_TRANSFER", "LOCAL_INVOICING"]),
+  platform: z.enum(PLATFORMS),
   authCode: z.string().optional(),
 });
 
 const unlinkSchema = z.object({
   sourceId: z.string().min(1),
 });
-
-/**
- * Recomputes and persists the IVS score for a freelancer,
- * using only transactions from currently CONNECTED sources.
- */
-async function recomputeAndPersistScore(uid: string) {
-  const allSources = await dbService.listConnectedSources(uid);
-  const connectedSourceIds = new Set(
-    allSources.filter((s) => s.status === "CONNECTED").map((s) => s.id)
-  );
-  const allTransactions = await dbService.listTransactions(uid);
-  const activeTransactions = allTransactions.filter((tx) =>
-    connectedSourceIds.has(tx.sourceId)
-  );
-  const scores = computeIncomeScore(activeTransactions);
-
-  await dbService.upsertIncomeScore({
-    freelancerId: uid,
-    avgMonthlyIncome: scores.avgMonthlyIncome,
-    coefficientOfVariation: scores.coefficientOfVariation,
-    trend: scores.trend,
-    sourceDiversityScore: scores.sourceDiversityScore,
-    ivs: scores.ivs,
-    eligibilityBandPKR: scores.eligibilityBandPKR,
-    computedAt: new Date().toISOString(),
-  });
-
-  return scores;
-}
 
 /**
  * POST /api/v1/connectors/link
@@ -96,17 +68,20 @@ export async function POST(request: Request) {
       validated.authCode
     );
 
-    // 3. Persist or re-activate the source document
+    // 3. Persist or re-activate the source document. Connecting pulls a fresh
+    //    transaction history below, so this counts as the first sync.
+    const syncedAt = new Date().toISOString();
     if (existingSource && existingSource.status === "DISCONNECTED") {
       // Re-activation path: update status back to CONNECTED
       await dbService.updateConnectedSource(authUser.uid, source.id, {
         status: "CONNECTED",
         connectedAt: source.connectedAt,
         provider: "sandbox",
+        lastSyncedAt: syncedAt,
       });
     } else {
       // New connection path
-      await dbService.createConnectedSource(source);
+      await dbService.createConnectedSource({ ...source, lastSyncedAt: syncedAt });
     }
 
     // 4. Populate 6-month mock transaction history for this source
@@ -122,14 +97,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      source,
-      score: {
-        ivs: scores.ivs,
-        avgMonthlyIncome: scores.avgMonthlyIncome,
-        trend: scores.trend,
-        sourceDiversityScore: scores.sourceDiversityScore,
-        eligibilityBandPKR: scores.eligibilityBandPKR,
-      },
+      source: { ...source, lastSyncedAt: syncedAt },
+      score: toScoreResponse(scores),
       message: `${validated.platform} linked and transactions populated successfully.`,
     });
   } catch (error: any) {
@@ -205,13 +174,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({
       success: true,
       sourceId: validated.sourceId,
-      score: {
-        ivs: scores.ivs,
-        avgMonthlyIncome: scores.avgMonthlyIncome,
-        trend: scores.trend,
-        sourceDiversityScore: scores.sourceDiversityScore,
-        eligibilityBandPKR: scores.eligibilityBandPKR,
-      },
+      score: toScoreResponse(scores),
       message: `Source disconnected successfully. Data retained for audit.`,
     });
   } catch (error: any) {

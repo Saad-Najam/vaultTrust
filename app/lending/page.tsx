@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import BankSidebar from "@/components/BankSidebar";
+import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 
 export default function Page() {
@@ -107,9 +108,7 @@ export default function Page() {
       <span className="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-surface"></span>
       </div>
       <span className="material-symbols-outlined text-on-surface-variant cursor-pointer hover:bg-surface-container-high p-2 rounded-full transition-opacity active:opacity-80" data-icon="verified">verified</span>
-      <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-fixed cursor-pointer transition-transform active:scale-95">
-      <img className="w-full h-full object-cover" data-alt="Close-up professional portrait of a high-ranking bank executive wearing a sharp dark suit against a minimalist architectural background. The image has soft, professional studio lighting with a neutral color palette of greys and deep greens, conveying authority, trust, and institutional reliability in a modern corporate setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQjQMgqipzs0f5OWdKbmSpqM2xsP7yILdqsbSV2hPeicM92R4nDzAchrNrXkeB47C8tgSNhQXFKtgAYb7lA1HJ0mqBucmtXXWsJWdRYq4HmuHD2oOWXy4klUdG2zwIqWvYo1AY1psaG50AewgTWEsbxE87BsNKjgNEjRcvqxn-agb_TLea-2K39e5zNCUWK6wxzpdWR2RTg-juYYrgfjP0qF_sTTOH-ZN2FgpngHrYUPB9dv71SE-I1A"/>
-      </div>
+      <UserAvatar size="w-10 h-10" showName href={null} />
       </div>
       </header>
       {/*  Content Canvas  */}
