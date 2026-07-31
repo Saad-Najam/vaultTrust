@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
+import NotificationBell from "@/components/NotificationBell";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import { toCsvRow, downloadTextFile } from "@/lib/download";
 import type { VerifiedLedgerEntry } from "@/lib/api_types";
 
 /** The ledger stores no actor column; the event type implies who acted. */
@@ -14,11 +16,49 @@ const ACTOR_BY_EVENT: Record<string, string> = {
   BANK_ACCESS: "Bank Officer",
 };
 
+const EVENT_TYPES = ["ALL", "GRANT", "SCOPE_CHANGE", "REVOKE", "BANK_ACCESS"] as const;
+type EventTypeFilter = (typeof EVENT_TYPES)[number];
+
 export default function Page() {
   const [ledger, setLedger] = useState<VerifiedLedgerEntry[]>([]);
   const [verified, setVerified] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<VerifiedLedgerEntry | null>(null);
   const [loading, setLoading] = useState(true);
+  const [eventTypeFilter, setEventTypeFilter] = useState<EventTypeFilter>("ALL");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onClickOutside = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [filterOpen]);
+
+  const filteredLedger = eventTypeFilter === "ALL" ? ledger : ledger.filter((b) => b.eventType === eventTypeFilter);
+
+  const handleExportReport = () => {
+    const header = toCsvRow(["Date", "Time", "Event", "Actor", "Consent ID", "Previous Hash", "This Hash", "Verified"]);
+    const rows = filteredLedger.map((block) => {
+      const date = new Date(block.timestamp);
+      return toCsvRow([
+        date.toLocaleDateString("en-GB"),
+        date.toLocaleTimeString(),
+        block.eventType,
+        ACTOR_BY_EVENT[block.eventType] || "System Auth",
+        block.consentId ? `VT-${block.consentId.substring(0, 6).toUpperCase()}` : "",
+        block.prevHash || "GENESIS",
+        block.thisHash || "",
+        block.verified ? "Yes" : "No",
+      ]);
+    });
+    downloadTextFile(
+      `vaulttrust-audit-ledger-${new Date().toISOString().slice(0, 10)}.csv`,
+      [header, ...rows].join("\n")
+    );
+  };
 
   useEffect(() => {
     const fetchLedger = async () => {
@@ -65,9 +105,7 @@ export default function Page() {
       )}
       </div>
       <div className="flex items-center gap-4">
-      <button className="hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full p-2 transition-opacity active:opacity-80">
-      <span className="material-symbols-outlined text-on-surface-variant" data-icon="notifications">notifications</span>
-      </button>
+      <NotificationBell />
       <UserAvatar size="w-8 h-8" />
       </div>
       </header>
@@ -82,11 +120,39 @@ export default function Page() {
       <p className="text-body-sm text-on-surface-variant">Real-time tracking of all data access and account mutations.</p>
       </div>
       <div className="flex gap-2">
-      <button className="flex items-center gap-2 px-4 py-2 border border-outline rounded-xl text-label-md hover:bg-surface-container transition-all">
+      <div className="relative" ref={filterRef}>
+      <button
+        onClick={() => setFilterOpen((o) => !o)}
+        aria-expanded={filterOpen}
+        className="flex items-center gap-2 px-4 py-2 border border-outline rounded-xl text-label-md hover:bg-surface-container transition-all"
+      >
       <span className="material-symbols-outlined text-[18px]" data-icon="filter_list">filter_list</span>
-                                  Filter
+                                  Filter{eventTypeFilter !== "ALL" ? `: ${eventTypeFilter.replace("_", " ")}` : ""}
                                </button>
-      <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-label-md hover:shadow-lg transition-all">
+      {filterOpen && (
+        <div className="absolute right-0 mt-2 w-48 bg-surface-container-lowest rounded-xl shadow-[0px_12px_32px_rgba(0,0,0,0.12)] border border-outline-variant/30 py-2 z-50">
+          {EVENT_TYPES.map((type) => (
+            <button
+              key={type}
+              onClick={() => {
+                setEventTypeFilter(type);
+                setFilterOpen(false);
+              }}
+              className={`w-full text-left px-4 py-2 text-body-sm hover:bg-surface-container transition-colors ${
+                eventTypeFilter === type ? "text-primary font-bold" : "text-on-surface"
+              }`}
+            >
+              {type === "ALL" ? "All events" : type.replace("_", " ")}
+            </button>
+          ))}
+        </div>
+      )}
+      </div>
+      <button
+        onClick={handleExportReport}
+        disabled={filteredLedger.length === 0}
+        className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-label-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+      >
       <span className="material-symbols-outlined text-[18px]" data-icon="download">download</span>
                                   Export Report
                                </button>
@@ -104,7 +170,7 @@ export default function Page() {
       </tr>
       </thead>
       <tbody className="divide-y divide-surface-container text-on-surface">
-      {ledger.map((block) => {
+      {filteredLedger.map((block) => {
         const date = new Date(block.timestamp);
         const isSelected = selectedBlock?.id === block.id;
         return (
@@ -139,10 +205,12 @@ export default function Page() {
           </tr>
         );
       })}
-      {ledger.length === 0 && !loading && (
+      {filteredLedger.length === 0 && !loading && (
         <tr>
           <td colSpan={5} className="px-8 py-10 text-center italic text-on-surface-variant text-body-md">
-            No entries found in the audit trail.
+            {ledger.length === 0
+              ? "No entries found in the audit trail."
+              : `No ${eventTypeFilter.replace("_", " ").toLowerCase()} events found.`}
           </td>
         </tr>
       )}

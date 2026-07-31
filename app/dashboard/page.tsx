@@ -7,6 +7,8 @@ import { normalizeAmountToPKR } from "@/lib/scoring";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { useCurrentUser } from "@/lib/use_current_user";
 import { INCOME_PLATFORMS, PLATFORM_META } from "@/lib/platforms";
+import { toCsvRow, downloadTextFile } from "@/lib/download";
+import NotificationBell from "@/components/NotificationBell";
 import type { Consent, ReliabilityResponse, SummaryResponse } from "@/lib/api_types";
 import type { IncomePlatform } from "@/lib/platforms";
 
@@ -370,6 +372,7 @@ export default function Page() {
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [reliability, setReliability] = useState<ReliabilityResponse | null>(null);
   const [consent, setConsent] = useState<Consent | null>(null);
+  const [shareState, setShareState] = useState<"idle" | "copied">("idle");
   const { photoURL } = useCurrentUser();
 
   useEffect(() => {
@@ -423,6 +426,59 @@ export default function Page() {
     return { platform, arc, rest: DONUT_CIRCUMFERENCE - arc, offset };
   });
 
+  const handleExportStatement = () => {
+    const rows: string[] = [toCsvRow(["Field", "Value"])];
+    rows.push(toCsvRow(["Freelancer", reliability?.userName || ""]));
+    rows.push(toCsvRow(["Verified Monthly Income (PKR)", Math.round(reliability?.scores?.avgMonthlyIncome || 0)]));
+    rows.push(toCsvRow(["Verification Score (IVS)", reliability?.scores?.ivs ?? ""]));
+    rows.push(toCsvRow(["Income Trend", reliability?.scores?.trend || ""]));
+    rows.push(toCsvRow(["Active Consent", consent ? "UBL Bank" : "None"]));
+    if (consent) {
+      rows.push(toCsvRow(["Consent Duration", consent.duration === "ROLLING_6MO" ? "6 mo. rolling" : "One-time"]));
+    }
+    rows.push(toCsvRow([]));
+    rows.push(toCsvRow(["Income Source", "Share of Income (%)"]));
+    activePlatforms.forEach((p) => {
+      rows.push(toCsvRow([PLATFORM_META[p]?.label || p, Math.round(sourceMix[p] || 0)]));
+    });
+    if (spendCredit?.hasCards) {
+      rows.push(toCsvRow([]));
+      rows.push(toCsvRow(["Credit Utilization (%)", spendCredit.utilizationPercent ?? ""]));
+      rows.push(toCsvRow(["Debt-to-Income (%)", spendCredit.dtiPercent ?? ""]));
+      rows.push(toCsvRow(["Recommended Credit Limit (PKR)", Math.round(spendCredit.recommendedCreditLimitPKR || 0)]));
+    }
+    if (eligibility) {
+      rows.push(toCsvRow([]));
+      rows.push(toCsvRow(["Lending Tier", eligibility.label]));
+      rows.push(toCsvRow(["Max Limit (PKR)", Math.round(eligibility.maxLimitPKR || 0)]));
+    }
+    downloadTextFile(
+      `vaulttrust-statement-${new Date().toISOString().slice(0, 10)}.csv`,
+      rows.join("\n")
+    );
+  };
+
+  const handleShareProfile = async () => {
+    const shareText = `My VaultTrust verification score is ${reliability?.scores?.ivs ?? "—"}/100, with verified monthly income of PKR ${Math.round(
+      reliability?.scores?.avgMonthlyIncome || 0
+    ).toLocaleString()}.`;
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: "VaultTrust Verification", text: shareText });
+        return;
+      } catch {
+        // User cancelled the native share sheet — fall through to clipboard.
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setShareState("copied");
+      setTimeout(() => setShareState("idle"), 2000);
+    } catch {
+      // Clipboard API unavailable — nothing further to do silently.
+    }
+  };
+
   return (
     <>
       <FreelancerSidebar />
@@ -433,13 +489,10 @@ export default function Page() {
       </div>
       <div className="flex items-center gap-6">
       <div className="flex items-center gap-2">
-      <button className="relative hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full p-2 transition-opacity active:opacity-80">
-      <span className="material-symbols-outlined text-on-surface-variant" data-icon="notifications">notifications</span>
-      <span className="absolute top-1 right-1 w-2 h-2 bg-error rounded-full"></span>
-      </button>
-      <button className="hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full p-2 transition-opacity active:opacity-80">
+      <NotificationBell />
+      <Link href="/profile" title="Verification status" className="hover:bg-surface-container-high dark:hover:bg-surface-container-highest rounded-full p-2 transition-opacity active:opacity-80">
       <span className="material-symbols-outlined text-on-surface-variant" data-icon="verified">verified</span>
-      </button>
+      </Link>
       </div>
       <div className="h-8 w-[1px] bg-outline-variant"></div>
       <Link href="/settings" title="Edit profile" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
@@ -467,13 +520,13 @@ export default function Page() {
       <p className="text-body-lg text-on-surface-variant">Here is your verified financial health and consent status for today.</p>
       </div>
       <div className="flex gap-3">
-      <button className="flex items-center gap-2 px-6 py-3 border border-outline text-primary rounded-full font-bold hover:bg-surface-container transition-all">
+      <button onClick={handleExportStatement} className="flex items-center gap-2 px-6 py-3 border border-outline text-primary rounded-full font-bold hover:bg-surface-container transition-all">
       <span className="material-symbols-outlined" data-icon="download">download</span>
                               Export Statement
                            </button>
-      <button className="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-full font-bold hover:shadow-xl transition-all">
-      <span className="material-symbols-outlined" data-icon="share">share</span>
-                              Share Profile
+      <button onClick={handleShareProfile} className="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-full font-bold hover:shadow-xl transition-all">
+      <span className="material-symbols-outlined" data-icon={shareState === "copied" ? "check" : "share"}>{shareState === "copied" ? "check" : "share"}</span>
+                              {shareState === "copied" ? "Copied!" : "Share Profile"}
                            </button>
       </div>
       </section>

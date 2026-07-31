@@ -2,8 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
+import NotificationBell from "@/components/NotificationBell";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import {
   INCOME_PLATFORMS,
@@ -542,6 +544,8 @@ function CreditCardConnector({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function Page() {
+  const router = useRouter();
+  const [savingDraft, setSavingDraft] = useState(false);
   const [sources, setSources] = useState<ConnectedSource[]>([]);
   const [summaryData, setSummaryData] = useState<SummaryData>({
     sourceMix: null,
@@ -764,17 +768,15 @@ export default function Page() {
           </h2>
         </div>
         <div className="flex items-center gap-4">
-          <button className="hover:bg-surface-container-high rounded-full p-2 text-on-surface-variant">
-            <span className="material-symbols-outlined">notifications</span>
-          </button>
-          <button className="hover:bg-surface-container-high rounded-full p-2 text-on-surface-variant">
+          <NotificationBell />
+          <Link href="/profile" title="Verification status" className="hover:bg-surface-container-high rounded-full p-2 text-on-surface-variant">
             <span
               className="material-symbols-outlined"
               style={{ fontVariationSettings: "'FILL' 1" }}
             >
               verified
             </span>
-          </button>
+          </Link>
           <UserAvatar size="w-10 h-10" showName />
         </div>
       </header>
@@ -1262,8 +1264,18 @@ export default function Page() {
               </p>
             </div>
             <div className="flex gap-4 w-full md:w-auto">
-              <button className="flex-1 md:flex-initial px-8 py-4 border-2 border-outline text-on-surface rounded-xl font-bold hover:bg-surface-container transition-all">
-                Save Draft
+              <button
+                onClick={() => {
+                  // Each connector link already persisted immediately via
+                  // /api/v1/connectors/link — there's no separate draft state
+                  // to save, so this just confirms that and returns home.
+                  setSavingDraft(true);
+                  router.push("/dashboard");
+                }}
+                disabled={savingDraft}
+                className="flex-1 md:flex-initial px-8 py-4 border-2 border-outline text-on-surface rounded-xl font-bold hover:bg-surface-container transition-all disabled:opacity-60"
+              >
+                {savingDraft ? "Saved — returning to dashboard..." : "Save Draft"}
               </button>
               <Link href="/consent/setup" className="flex-grow md:flex-none">
                 <button className="w-full px-10 py-4 bg-primary text-on-primary rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:-translate-y-1 hover:shadow-xl active:translate-y-0 transition-all">

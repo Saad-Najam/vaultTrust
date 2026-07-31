@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import BankSidebar from "@/components/BankSidebar";
 import UserAvatar from "@/components/UserAvatar";
+import NotificationBell from "@/components/NotificationBell";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import type { ApplicantListItem } from "@/lib/api_types";
 
@@ -43,11 +44,8 @@ export default function Page() {
       </div>
       </div>
       <div className="flex items-center gap-6">
-      <div className="relative group">
-      <span className="material-symbols-outlined text-on-surface-variant cursor-pointer hover:bg-surface-container-high p-2 rounded-full transition-opacity active:opacity-80" data-icon="notifications">notifications</span>
-      <span className="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border-2 border-surface"></span>
-      </div>
-      <span className="material-symbols-outlined text-on-surface-variant cursor-pointer hover:bg-surface-container-high p-2 rounded-full transition-opacity active:opacity-80" data-icon="verified">verified</span>
+      <NotificationBell />
+      <Link href="/audit" title="Audit trail" className="material-symbols-outlined text-on-surface-variant cursor-pointer hover:bg-surface-container-high p-2 rounded-full transition-opacity active:opacity-80" data-icon="verified">verified</Link>
       <UserAvatar size="w-10 h-10" showName href={null} />
       </div>
       </header>
