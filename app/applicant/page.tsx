@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { doc, onSnapshot } from "firebase/firestore";
 import BankSidebar from "@/components/BankSidebar";
@@ -43,6 +43,37 @@ function ApplicantDetail() {
   // Read-only mirror of what app/api/v1/consent/revoke/route.ts has already
   // written to Firestore — this listener never writes anything itself.
   const [liveConsent, setLiveConsent] = useState<Consent | null>(null);
+  const [autoResolveDone, setAutoResolveDone] = useState(false);
+  const router = useRouter();
+
+  // Reached without a freelancerId (e.g. straight from the sidebar): pick the
+  // first applicant this bank actually has active consent for, and put them in
+  // the URL so the page stays refreshable and shareable.
+  useEffect(() => {
+    if (freelancerId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetchWithAuth("/api/v1/lending/assess");
+        const data = await res.json();
+        const first = data.success
+          ? (data.applicants || []).find(
+              (a: { consentStatus: string }) => a.consentStatus === "ACTIVE"
+            )
+          : null;
+        if (!cancelled && first) {
+          router.replace(`/applicant?freelancerId=${first.id}`);
+          return;
+        }
+      } catch (err) {
+        console.error("[Applicant] Could not auto-select an applicant:", err);
+      }
+      if (!cancelled) setAutoResolveDone(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [freelancerId, router]);
 
   useEffect(() => {
     if (!freelancerId) return;
@@ -113,6 +144,20 @@ function ApplicantDetail() {
   }, [consentId]);
 
   const isLiveRevoked = liveConsent?.status === "REVOKED";
+
+  if (!freelancerId && !autoResolveDone) {
+    return (
+      <>
+        <BankSidebar />
+        <div className="ml-72 flex h-screen items-center justify-center bg-surface">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-body-md text-on-surface-variant">Selecting a consented applicant...</p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (!freelancerId) {
     return (
