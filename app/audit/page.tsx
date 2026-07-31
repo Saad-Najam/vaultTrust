@@ -8,7 +8,7 @@ import NotificationBell from "@/components/NotificationBell";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { toCsvRow, downloadTextFile } from "@/lib/download";
 import { useRole } from "@/lib/use_role";
-import type { VerifiedLedgerEntry } from "@/lib/api_types";
+import type { VerifiedLedgerEntry, VerificationResponse } from "@/lib/api_types";
 
 /** The ledger stores no actor column; the event type implies who acted. */
 const ACTOR_BY_EVENT: Record<string, string> = {
@@ -35,6 +35,27 @@ export default function Page() {
   const [eventTypeFilter, setEventTypeFilter] = useState<EventTypeFilter>("ALL");
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<VerificationResponse | null>(null);
+
+  // Re-runs the real chain check for the selected block's consent: recomputes
+  // the SHA-256 hash chain server-side and compares it against the on-chain
+  // Solana record, rather than trusting the `verified` flag already in state.
+  const handleVerifyChain = async () => {
+    if (!selectedBlock?.consentId || verifying) return;
+    setVerifying(true);
+    setVerifyResult(null);
+    try {
+      const res = await fetchWithAuth(`/api/v1/consent/${selectedBlock.consentId}/verify`);
+      const data: VerificationResponse = await res.json();
+      setVerifyResult(data);
+    } catch (err) {
+      console.error("[Audit] Verify chain failed:", err);
+      setVerifyResult({ success: false, error: "Could not reach the server. Please try again." });
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -208,7 +229,11 @@ export default function Page() {
           <tr 
             key={block.id} 
             className={`hover:bg-surface-container-low transition-colors cursor-pointer group ${isSelected ? 'bg-primary/5 border-l-4 border-primary' : ''}`} 
-            onClick={() => setSelectedBlock(block)}
+            onClick={() => {
+              setSelectedBlock(block);
+              // Otherwise a previous block's verdict would linger in the drawer.
+              setVerifyResult(null);
+            }}
           >
             <td className="px-8 py-5">
               <div className="font-bold text-body-sm">{date.toLocaleDateString("en-GB", {day: "numeric", month: "short", year: "numeric"})}</div>
@@ -313,10 +338,98 @@ export default function Page() {
             )}
           </pre>
           </div>
-          <button className="w-full py-4 border-2 border-primary text-primary rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all">
-          <span className="material-symbols-outlined" data-icon="description">description</span>
-                                  Verify Chain Integrity
+          <button
+            onClick={handleVerifyChain}
+            disabled={verifying || !selectedBlock.consentId}
+            className="w-full py-4 border-2 border-primary text-primary rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-primary/5 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+          <span className={`material-symbols-outlined ${verifying ? "animate-spin" : ""}`} data-icon="description">
+            {verifying ? "progress_activity" : "description"}
+          </span>
+                                  {verifying ? "Verifying..." : "Verify Chain Integrity"}
                               </button>
+
+          {verifyResult && (
+            <div className="mt-4">
+              {!verifyResult.success ? (
+                <div className="p-3 bg-error/10 border border-error/20 rounded-xl flex items-start gap-2">
+                  <span className="material-symbols-outlined text-error text-[18px] mt-0.5">error</span>
+                  <p className="text-body-sm text-error">{verifyResult.error || "Verification failed."}</p>
+                </div>
+              ) : (
+                <div
+                  className={`p-4 rounded-xl border ${
+                    verifyResult.status === "VERIFIED"
+                      ? "bg-primary/5 border-primary/20"
+                      : verifyResult.status === "TAMPERED"
+                        ? "bg-error/10 border-error/20"
+                        : "bg-secondary/10 border-secondary/20"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <span
+                      className={`material-symbols-outlined text-[18px] ${
+                        verifyResult.status === "VERIFIED"
+                          ? "text-primary"
+                          : verifyResult.status === "TAMPERED"
+                            ? "text-error"
+                            : "text-secondary"
+                      }`}
+                      style={{ fontVariationSettings: "'FILL' 1" }}
+                    >
+                      {verifyResult.status === "VERIFIED"
+                        ? "verified"
+                        : verifyResult.status === "TAMPERED"
+                          ? "warning"
+                          : "schedule"}
+                    </span>
+                    <span
+                      className={`text-label-md font-bold ${
+                        verifyResult.status === "VERIFIED"
+                          ? "text-primary"
+                          : verifyResult.status === "TAMPERED"
+                            ? "text-error"
+                            : "text-secondary"
+                      }`}
+                    >
+                      {verifyResult.status === "VERIFIED"
+                        ? "Chain verified"
+                        : verifyResult.status === "TAMPERED"
+                          ? "Tamper detected"
+                          : "Local ledger verified"}
+                    </span>
+                  </div>
+
+                  {verifyResult.localLedger && (
+                    <p className="text-label-sm text-on-surface-variant mb-1">
+                      Local hash chain: {verifyResult.localLedger.entryCount} block
+                      {verifyResult.localLedger.entryCount === 1 ? "" : "s"} recomputed —{" "}
+                      {verifyResult.localLedger.intact ? "intact" : "BROKEN"}
+                    </p>
+                  )}
+                  <p className="text-label-sm text-on-surface-variant mb-1">
+                    On-chain record: {verifyResult.onChain ? `found (${verifyResult.onChain.status})` : "not yet confirmed"}
+                  </p>
+
+                  {verifyResult.reasons && verifyResult.reasons.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {verifyResult.reasons.map((reason, i) => (
+                        <li key={i} className="text-[12px] text-on-surface-variant leading-relaxed">
+                          • {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {verifyResult.timestamp && (
+                    <p className="text-[11px] text-on-surface-variant/70 mt-3">
+                      Checked {new Date(verifyResult.timestamp).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           </div>
         </div>
       ) : (
