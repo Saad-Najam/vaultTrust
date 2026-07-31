@@ -11,6 +11,9 @@ const navItems = [
   { href: "/consent/active", icon: "fact_check", label: "Consent Status" },
   { href: "/audit", icon: "receipt_long", label: "Audit Trail" },
   { href: "/dashboard", icon: "insights", label: "Insights" },
+  // Bank officers previously had no route to Settings at all, which meant
+  // no way to sign out anywhere in the enterprise portal.
+  { href: "/settings", icon: "settings", label: "Settings" },
 ];
 
 export default function BankSidebar() {

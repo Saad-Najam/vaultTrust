@@ -8,6 +8,9 @@ const navItems = [
   { href: "/dashboard", icon: "dashboard", label: "Overview" },
   { href: "/connect", icon: "account_balance", label: "Connected Accounts" },
   { href: "/consent/setup", icon: "verified_user", label: "Consent Center" },
+  // Was only reachable via a button on /consent/active, so it never showed
+  // up in the nav despite being a top-level page.
+  { href: "/consent/manage", icon: "manage_accounts", label: "Manage Consent" },
   { href: "/profile", icon: "payments", label: "Income Profile" },
   { href: "/audit", icon: "receipt_long", label: "Activity & Audit Trail" },
   { href: "/settings", icon: "settings", label: "Settings" },

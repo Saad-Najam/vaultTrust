@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import BankSidebar from "@/components/BankSidebar";
 import { auth } from "@/lib/firebase";
 import { waitForAuthInit } from "@/lib/auth_client";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { useCurrentUser, setCurrentUserProfile } from "@/lib/use_current_user";
+import { useRole } from "@/lib/use_role";
 import { getErrorMessage } from "@/lib/errors";
-import RoleGate from "@/components/RoleGate";
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -52,7 +53,11 @@ function resizeImageToDataUrl(file: File, maxDim = 320, quality = 0.85): Promise
   });
 }
 
-function SettingsPage() {
+export default function Page() {
+  // Both roles need this page — it is the only place either one can sign
+  // out from. Gating it to FREELANCER left bank officers with no logout
+  // path anywhere in the UI.
+  const { role, loading: roleLoading } = useRole();
   const [email, setEmail] = useState<string | null>(null);
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -161,9 +166,17 @@ function SettingsPage() {
     }
   };
 
+  if (roleLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-surface">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
   return (
     <>
-      <FreelancerSidebar />
+      {role === "BANK_OFFICER" ? <BankSidebar /> : <FreelancerSidebar />}
       <main className="lg:ml-64 min-h-screen bg-surface animate-fade-in">
         <header className="flex items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 bg-surface-container-lowest shadow-sm sticky top-0 z-30">
           <h2 className="text-headline-sm font-headline-sm font-bold text-primary">Settings</h2>
@@ -299,13 +312,5 @@ function SettingsPage() {
         </div>
       </main>
     </>
-  );
-}
-
-export default function Page() {
-  return (
-    <RoleGate allow="FREELANCER">
-      <SettingsPage />
-    </RoleGate>
   );
 }
