@@ -22,7 +22,11 @@ const EVENT_TYPES = ["ALL", "GRANT", "SCOPE_CHANGE", "REVOKE", "BANK_ACCESS"] as
 type EventTypeFilter = (typeof EVENT_TYPES)[number];
 
 export default function Page() {
-  const { role } = useCurrentUser();
+  // useCurrentUser() starts as role: null while its fetch is in flight —
+  // without gating on its own loading flag, isBankOfficer reads false for
+  // that first render and the freelancer sidebar flashes before flipping
+  // to the bank one.
+  const { role, loading: roleLoading } = useCurrentUser();
   const isBankOfficer = role === "BANK_OFFICER";
   const [ledger, setLedger] = useState<VerifiedLedgerEntry[]>([]);
   const [applicantNames, setApplicantNames] = useState<Record<string, string>>({});
@@ -97,6 +101,14 @@ export default function Page() {
     };
     fetchLedger();
   }, []);
+
+  if (roleLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-surface">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   return (
     <>
