@@ -16,27 +16,35 @@ export async function GET(request: Request) {
 
     const userId = authUser.uid;
 
-    // Fetch all ledger entries for this freelancer (across all their consents)
-    const entries = await dbService.listLedgerEntriesForFreelancer(userId);
+    // Freelancers see the ledger for their own consents; bank officers see
+    // every consent ever granted to their own bankId. Same verification
+    // logic either way — only which consents feed into it differs.
+    const entries =
+      authUser.role === "BANK_OFFICER"
+        ? await dbService.listLedgerEntriesForBank(userId)
+        : await dbService.listLedgerEntriesForFreelancer(userId);
 
     // Group entries by consentId and verify each chain
     const consentIds = Array.from(new Set(entries.map((e) => e.consentId)));
     const verifiedEntries: (ConsentLedgerEntry & { verified: boolean; reason?: string })[] = [];
-    let isChainIntact = true;
+    // The frontend reads this as `verified` — keep the response key aligned
+    // with that (it was previously named isChainIntact here but never
+    // renamed on the way out, so the UI always read it as undefined/falsy).
+    let verified = true;
 
     for (const cid of consentIds) {
       // Run full chain integrity checks
       const verificationResults = await verifyLedgerChain(cid);
-      
+
       for (const res of verificationResults) {
         verifiedEntries.push({
           ...res.entry,
           verified: res.verified,
           reason: res.reason,
         });
-        
+
         if (!res.verified) {
-          isChainIntact = false;
+          verified = false;
         }
       }
     }
@@ -46,11 +54,26 @@ export async function GET(request: Request) {
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
 
+    // Bank officers' entries span multiple freelancers, so resolve which
+    // applicant each consentId belongs to for display purposes.
+    let applicantNames: Record<string, string> | undefined;
+    if (authUser.role === "BANK_OFFICER") {
+      applicantNames = {};
+      for (const cid of consentIds) {
+        const consent = await dbService.getConsent(cid);
+        if (consent) {
+          const freelancer = await dbService.getUser(consent.freelancerId);
+          applicantNames[cid] = freelancer?.name || "Unknown Freelancer";
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       userId,
       ledger: verifiedEntries,
-      isChainIntact,
+      verified,
+      ...(applicantNames ? { applicantNames } : {}),
     });
   } catch (error) {
     console.error("Audit ledger API endpoint error:", error);

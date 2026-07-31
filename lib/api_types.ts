@@ -186,3 +186,17 @@ export interface ApplicantListItem {
   outflowDisclosure: DisclosureStatus | null;
   eligibilityCapped: boolean;
 }
+
+/** One row of /api/v1/consent/bank-status — a consent (active or revoked)
+ *  granted to the calling bank. */
+export interface BankConsentStatusItem {
+  consentId: string;
+  freelancerId: string;
+  freelancerName: string;
+  status: "ACTIVE" | "REVOKED";
+  duration: "ONE_TIME" | "ROLLING_6MO";
+  sources: string[];
+  grantedAt: string;
+  revokedAt: string | null;
+  blockchainStatus: "CONFIRMED" | "FAILED" | "PENDING_RETRY" | null;
+}

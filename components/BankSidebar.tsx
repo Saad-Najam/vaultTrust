@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 
 const navItems = [
   { href: "/lending", icon: "group", label: "Applicant Profiles" },
-  { href: "/profile", icon: "bar_chart", label: "Shared Income Profiles" },
   { href: "/consent/active", icon: "fact_check", label: "Consent Status" },
   { href: "/audit", icon: "receipt_long", label: "Audit Trail" },
   { href: "/dashboard", icon: "insights", label: "Insights" },

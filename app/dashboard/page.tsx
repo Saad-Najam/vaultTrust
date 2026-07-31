@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import BankSidebar from "@/components/BankSidebar";
+import UserAvatar from "@/components/UserAvatar";
 import { normalizeAmountToPKR } from "@/lib/scoring";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { useCurrentUser } from "@/lib/use_current_user";
@@ -367,7 +369,7 @@ function SpendCreditWidget({
   );
 }
 
-export default function Page() {
+function FreelancerDashboard() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [reliability, setReliability] = useState<ReliabilityResponse | null>(null);
@@ -775,4 +777,50 @@ export default function Page() {
       {/*  Micro-interaction Scripts  */}
     </>
   );
+}
+
+function BankInsightsPlaceholder() {
+  return (
+    <>
+      <BankSidebar />
+      <main className="ml-72 min-h-screen bg-surface animate-fade-in">
+        <header className="flex justify-between items-center w-full px-margin-desktop h-16 bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sticky top-0 z-40">
+          <h2 className="text-headline-sm font-headline-sm font-bold text-primary">Insights</h2>
+          <div className="flex items-center gap-4">
+            <NotificationBell />
+            <UserAvatar size="w-8 h-8" href={null} />
+          </div>
+        </header>
+        <div className="max-w-2xl mx-auto py-24 px-gutter flex flex-col items-center text-center">
+          <div className="w-20 h-20 bg-primary-container/10 rounded-full flex items-center justify-center mb-6 text-primary">
+            <span className="material-symbols-outlined text-4xl">construction</span>
+          </div>
+          <h3 className="text-headline-md font-headline-md text-on-surface mb-2">Portfolio Insights — Coming Soon</h3>
+          <p className="text-body-md text-on-surface-variant max-w-md mb-8">
+            Portfolio-wide analytics across all applicants aren&apos;t built yet. In the meantime, Applicant Profiles has per-applicant income, IVS score, and eligibility data.
+          </p>
+          <Link href="/lending">
+            <button className="bg-primary text-on-primary px-8 py-4 rounded-xl font-bold flex items-center gap-2 hover:shadow-lg transition-all active:scale-95">
+              <span className="material-symbols-outlined">group</span>
+              Go to Applicant Profiles
+            </button>
+          </Link>
+        </div>
+      </main>
+    </>
+  );
+}
+
+export default function Page() {
+  const { role, loading } = useCurrentUser();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-surface">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  return role === "BANK_OFFICER" ? <BankInsightsPlaceholder /> : <FreelancerDashboard />;
 }

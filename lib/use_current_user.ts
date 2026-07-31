@@ -7,6 +7,7 @@ export interface CurrentUserProfile {
   name: string | null;
   email: string | null;
   photoURL: string | null;
+  role: "FREELANCER" | "BANK_OFFICER" | null;
 }
 
 interface StoreState extends CurrentUserProfile {
@@ -17,6 +18,7 @@ const EMPTY: StoreState = {
   name: null,
   email: null,
   photoURL: null,
+  role: null,
   loading: true,
 };
 
@@ -64,6 +66,7 @@ async function load(force: boolean): Promise<void> {
           name: data.name || null,
           email: data.email || null,
           photoURL: data.photoURL || null,
+          role: data.role || null,
           loading: false,
         });
       } else {

@@ -44,6 +44,7 @@ export async function GET(request: Request) {
         email: authUser.email || null,
         photoURL: null,
         kycStatus: "NOT_STARTED",
+        role: authUser.role,
         incomplete: true,
       });
     }
@@ -54,6 +55,7 @@ export async function GET(request: Request) {
       email: user.email,
       photoURL: user.photoURL || null,
       kycStatus: user.kycStatus,
+      role: user.role,
     });
   } catch (error) {
     console.error("[Profile Me GET] Error:", error);

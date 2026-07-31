@@ -345,6 +345,17 @@ export const dbService = {
     return active;
   },
 
+  async listConsentsForBank(bankId: string): Promise<Consent[]> {
+    const firestore = getAdminFirestore();
+    const snap = await firestore
+      .collection("consents")
+      .where("bankId", "==", bankId)
+      .get();
+    return snap.docs
+      .map((doc) => doc.data() as Consent)
+      .sort((a, b) => new Date(b.grantedAt).getTime() - new Date(a.grantedAt).getTime());
+  },
+
   async createConsent(consent: Consent): Promise<void> {
     const firestore = getAdminFirestore();
     await firestore.collection("consents").doc(consent.id).set(consent);
@@ -396,6 +407,27 @@ export const dbService = {
         .collection("entries")
         .get();
       
+      entriesSnap.forEach((doc) => allEntries.push(doc.data() as ConsentLedgerEntry));
+    }
+    return allEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  },
+
+  async listLedgerEntriesForBank(bankId: string): Promise<ConsentLedgerEntry[]> {
+    const firestore = getAdminFirestore();
+    const consentsSnap = await firestore
+      .collection("consents")
+      .where("bankId", "==", bankId)
+      .get();
+
+    const allEntries: ConsentLedgerEntry[] = [];
+    for (const consentDoc of consentsSnap.docs) {
+      const consentId = consentDoc.id;
+      const entriesSnap = await firestore
+        .collection("consentLedger")
+        .doc(consentId)
+        .collection("entries")
+        .get();
+
       entriesSnap.forEach((doc) => allEntries.push(doc.data() as ConsentLedgerEntry));
     }
     return allEntries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());

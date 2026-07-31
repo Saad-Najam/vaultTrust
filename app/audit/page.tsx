@@ -2,10 +2,12 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import BankSidebar from "@/components/BankSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import NotificationBell from "@/components/NotificationBell";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { toCsvRow, downloadTextFile } from "@/lib/download";
+import { useCurrentUser } from "@/lib/use_current_user";
 import type { VerifiedLedgerEntry } from "@/lib/api_types";
 
 /** The ledger stores no actor column; the event type implies who acted. */
@@ -20,7 +22,10 @@ const EVENT_TYPES = ["ALL", "GRANT", "SCOPE_CHANGE", "REVOKE", "BANK_ACCESS"] as
 type EventTypeFilter = (typeof EVENT_TYPES)[number];
 
 export default function Page() {
+  const { role } = useCurrentUser();
+  const isBankOfficer = role === "BANK_OFFICER";
   const [ledger, setLedger] = useState<VerifiedLedgerEntry[]>([]);
+  const [applicantNames, setApplicantNames] = useState<Record<string, string>>({});
   const [verified, setVerified] = useState(true);
   const [selectedBlock, setSelectedBlock] = useState<VerifiedLedgerEntry | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,7 +45,17 @@ export default function Page() {
   const filteredLedger = eventTypeFilter === "ALL" ? ledger : ledger.filter((b) => b.eventType === eventTypeFilter);
 
   const handleExportReport = () => {
-    const header = toCsvRow(["Date", "Time", "Event", "Actor", "Consent ID", "Previous Hash", "This Hash", "Verified"]);
+    const header = toCsvRow([
+      "Date",
+      "Time",
+      "Event",
+      "Actor",
+      ...(isBankOfficer ? ["Applicant"] : []),
+      "Consent ID",
+      "Previous Hash",
+      "This Hash",
+      "Verified",
+    ]);
     const rows = filteredLedger.map((block) => {
       const date = new Date(block.timestamp);
       return toCsvRow([
@@ -48,6 +63,7 @@ export default function Page() {
         date.toLocaleTimeString(),
         block.eventType,
         ACTOR_BY_EVENT[block.eventType] || "System Auth",
+        ...(isBankOfficer ? [applicantNames[block.consentId] || ""] : []),
         block.consentId ? `VT-${block.consentId.substring(0, 6).toUpperCase()}` : "",
         block.prevHash || "GENESIS",
         block.thisHash || "",
@@ -68,6 +84,7 @@ export default function Page() {
         if (data.success) {
           setLedger(data.ledger);
           setVerified(data.verified);
+          setApplicantNames(data.applicantNames || {});
           if (data.ledger && data.ledger.length > 0) {
             setSelectedBlock(data.ledger[0]);
           }
@@ -84,8 +101,8 @@ export default function Page() {
   return (
     <>
       {/*  Predicted Component: SideNavBar  */}
-      
-      <FreelancerSidebar />
+
+      {isBankOfficer ? <BankSidebar /> : <FreelancerSidebar />}
 
       {/*  Predicted Component: TopAppBar  */}
       <header className="flex justify-between items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 lg:ml-64 lg:max-w-[calc(100%-16rem)] bg-surface-container-lowest dark:bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] fixed top-0 z-40">
@@ -106,7 +123,7 @@ export default function Page() {
       </div>
       <div className="flex items-center gap-4">
       <NotificationBell />
-      <UserAvatar size="w-8 h-8" />
+      <UserAvatar size="w-8 h-8" href={isBankOfficer ? null : "/settings"} />
       </div>
       </header>
       {/*  Main Content Canvas  */}
@@ -165,6 +182,9 @@ export default function Page() {
       <th className="px-8 py-4 font-label-md text-label-sm uppercase tracking-wider">Date &amp; Time</th>
       <th className="px-6 py-4 font-label-md text-label-sm uppercase tracking-wider">Event</th>
       <th className="px-6 py-4 font-label-md text-label-sm uppercase tracking-wider">Actor</th>
+      {isBankOfficer && (
+        <th className="px-6 py-4 font-label-md text-label-sm uppercase tracking-wider">Applicant</th>
+      )}
       <th className="px-6 py-4 font-label-md text-label-sm uppercase tracking-wider">Consent ID</th>
       <th className="px-6 py-4 font-label-md text-label-sm uppercase tracking-wider">Hash Ref</th>
       </tr>
@@ -194,6 +214,9 @@ export default function Page() {
               </div>
             </td>
             <td className="px-6 py-5 text-body-sm">{ACTOR_BY_EVENT[block.eventType] || "System Auth"}</td>
+            {isBankOfficer && (
+              <td className="px-6 py-5 text-body-sm">{applicantNames[block.consentId] || "—"}</td>
+            )}
             <td className="px-6 py-5 text-body-sm font-mono text-secondary">
               {block.consentId ? `#VT-${block.consentId.substring(0, 6).toUpperCase()}` : "---"}
             </td>
@@ -207,7 +230,7 @@ export default function Page() {
       })}
       {filteredLedger.length === 0 && !loading && (
         <tr>
-          <td colSpan={5} className="px-8 py-10 text-center italic text-on-surface-variant text-body-md">
+          <td colSpan={isBankOfficer ? 6 : 5} className="px-8 py-10 text-center italic text-on-surface-variant text-body-md">
             {ledger.length === 0
               ? "No entries found in the audit trail."
               : `No ${eventTypeFilter.replace("_", " ").toLowerCase()} events found.`}

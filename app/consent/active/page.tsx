@@ -3,12 +3,15 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
+import BankSidebar from "@/components/BankSidebar";
 import UserAvatar from "@/components/UserAvatar";
+import NotificationBell from "@/components/NotificationBell";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { formatConsentExpiry } from "@/lib/consent_display";
-import type { Consent } from "@/lib/api_types";
+import { useCurrentUser } from "@/lib/use_current_user";
+import type { Consent, BankConsentStatusItem } from "@/lib/api_types";
 
-export default function Page() {
+function FreelancerConsentStatus() {
   const [consent, setConsent] = useState<Consent | null>(null);
   const [revoking, setRevoking] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
@@ -72,12 +75,10 @@ export default function Page() {
       <header className="flex justify-between items-center w-full pl-16 pr-5 lg:px-margin-desktop h-16 bg-surface-container-lowest shadow-sm sticky top-0 z-30">
       <h2 className="text-headline-sm font-headline-sm font-bold text-primary">Success Status</h2>
       <div className="flex items-center gap-4">
-      <button className="hover:bg-surface-container-high rounded-full p-2 transition-colors">
-      <span className="material-symbols-outlined text-primary">notifications</span>
-      </button>
-      <button className="hover:bg-surface-container-high rounded-full p-2 transition-colors">
+      <NotificationBell />
+      <Link href="/profile" title="Verification status" className="hover:bg-surface-container-high rounded-full p-2 transition-colors">
       <span className="material-symbols-outlined text-primary">verified</span>
-      </button>
+      </Link>
       <UserAvatar size="w-8 h-8" />
       </div>
       </header>
@@ -243,4 +244,117 @@ export default function Page() {
       </div>
     </>
   );
+}
+
+function statusBadge(status: "ACTIVE" | "REVOKED") {
+  return status === "ACTIVE" ? (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary rounded-full text-label-sm font-bold">
+      <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+        check_circle
+      </span>
+      Active
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-error/10 text-error rounded-full text-label-sm font-bold">
+      <span className="material-symbols-outlined text-[14px]" style={{ fontVariationSettings: "'FILL' 1" }}>
+        block
+      </span>
+      Revoked
+    </span>
+  );
+}
+
+function BankConsentStatus() {
+  const [consents, setConsents] = useState<BankConsentStatusItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetchWithAuth("/api/v1/consent/bank-status");
+        const data = await res.json();
+        if (data.success) setConsents(data.consents);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, []);
+
+  return (
+    <>
+      <BankSidebar />
+      <main className="ml-72 min-h-screen bg-surface animate-fade-in">
+        <header className="flex justify-between items-center w-full px-margin-desktop h-16 bg-surface-container-lowest shadow-[0px_4px_20px_rgba(0,0,0,0.04)] sticky top-0 z-40">
+          <h2 className="text-headline-sm font-headline-sm font-bold text-primary">Consent Status</h2>
+          <div className="flex items-center gap-4">
+            <NotificationBell />
+            <UserAvatar size="w-8 h-8" href={null} />
+          </div>
+        </header>
+        <div className="max-w-container-max mx-auto p-stack-lg">
+          <p className="text-body-md text-on-surface-variant mb-6">
+            Every consent — active or revoked — that a freelancer has granted to UBL Digital Lending, straight from the tamper-evident ledger.
+          </p>
+          <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/30 shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-surface-container-low text-on-surface-variant">
+                  <th className="px-6 py-4 text-label-sm uppercase tracking-wider">Applicant</th>
+                  <th className="px-6 py-4 text-label-sm uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-label-sm uppercase tracking-wider">Sources</th>
+                  <th className="px-6 py-4 text-label-sm uppercase tracking-wider">Granted</th>
+                  <th className="px-6 py-4 text-label-sm uppercase tracking-wider">Blockchain</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-surface-container">
+                {consents.map((c) => (
+                  <tr key={c.consentId} className="hover:bg-surface-container-low transition-colors">
+                    <td className="px-6 py-5">
+                      <Link href={`/applicant?freelancerId=${c.freelancerId}`} className="font-bold text-on-surface hover:text-primary hover:underline">
+                        {c.freelancerName}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-5">{statusBadge(c.status)}</td>
+                    <td className="px-6 py-5 text-body-sm text-on-surface-variant">{c.sources.join(", ") || "—"}</td>
+                    <td className="px-6 py-5 text-body-sm text-on-surface-variant">
+                      {c.status === "REVOKED" && c.revokedAt
+                        ? `Revoked ${new Date(c.revokedAt).toLocaleDateString()}`
+                        : new Date(c.grantedAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-5 text-body-sm text-on-surface-variant">
+                      {c.blockchainStatus === "CONFIRMED" ? "Confirmed" : c.blockchainStatus || "—"}
+                    </td>
+                  </tr>
+                ))}
+                {consents.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={5} className="px-8 py-10 text-center italic text-on-surface-variant text-body-md">
+                      No applicants have granted consent yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </>
+  );
+}
+
+export default function Page() {
+  const { role, loading } = useCurrentUser();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-surface">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  return role === "BANK_OFFICER" ? <BankConsentStatus /> : <FreelancerConsentStatus />;
 }
