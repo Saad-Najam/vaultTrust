@@ -27,6 +27,7 @@ const EVENT_LABELS: Record<string, string> = {
   SCOPE_CHANGE: "Consent Updated",
   REVOKE: "Consent Revoked",
   BANK_ACCESS: "Bank Accessed Data",
+  LOAN_OFFER: "Loan Offer Extended",
 };
 
 function ApplicantDetail() {
@@ -44,7 +45,40 @@ function ApplicantDetail() {
   // written to Firestore — this listener never writes anything itself.
   const [liveConsent, setLiveConsent] = useState<Consent | null>(null);
   const [autoResolveDone, setAutoResolveDone] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [offer, setOffer] = useState<ApplicantDetailResponse["loanOffer"]>(null);
   const router = useRouter();
+
+  const handleApproveLoan = async () => {
+    if (!freelancerId || approving) return;
+    setApproving(true);
+    setApproveError(null);
+    try {
+      const res = await fetchWithAuth("/api/v1/lending/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ freelancerId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOffer({
+          amountPKR: data.offer.amountPKR,
+          tierLabel: data.offer.tierLabel,
+          approvedAt: data.offer.approvedAt,
+        });
+      } else {
+        setApproveError(
+          typeof data.error === "string" ? data.error : "Could not record the approval."
+        );
+      }
+    } catch (err) {
+      console.error("[Applicant] Approve loan failed:", err);
+      setApproveError("Could not reach the server. Please try again.");
+    } finally {
+      setApproving(false);
+    }
+  };
 
   // Reached without a freelancerId (e.g. straight from the sidebar): pick the
   // first applicant this bank actually has active consent for, and put them in
@@ -83,6 +117,7 @@ function ApplicantDetail() {
         const data = await res.json();
         if (data.success) {
           setApplicant(data);
+          setOffer(data.loanOffer ?? null);
 
           const consentId = data.consentInfo?.consentId;
           if (consentId) {
@@ -417,10 +452,45 @@ function ApplicantDetail() {
                     </div>
                   )}
 
-                  <button className="w-full py-3 bg-white text-primary rounded-xl font-bold text-label-md hover:bg-opacity-90 transition-all flex items-center justify-center gap-2">
-                    Approve Loan Offer
-                    <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                  </button>
+                  {offer ? (
+                    <div className="w-full py-3 px-4 bg-white/15 border border-white/25 rounded-xl">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span
+                          className="material-symbols-outlined text-[18px]"
+                          style={{ fontVariationSettings: "'FILL' 1" }}
+                        >
+                          task_alt
+                        </span>
+                        <span className="font-bold text-label-md">Offer extended</span>
+                      </div>
+                      <p className="text-label-sm text-white/80">
+                        PKR {Math.round(offer.amountPKR).toLocaleString()} · {offer.tierLabel}
+                      </p>
+                      <p className="text-[11px] text-white/60 mt-0.5">
+                        Approved {new Date(offer.approvedAt).toLocaleString()}
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleApproveLoan}
+                      disabled={approving || isLiveRevoked}
+                      className="w-full py-3 bg-white text-primary rounded-xl font-bold text-label-md hover:bg-opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {approving ? "Recording approval..." : "Approve Loan Offer"}
+                      <span
+                        className={`material-symbols-outlined text-sm ${approving ? "animate-spin" : ""}`}
+                      >
+                        {approving ? "progress_activity" : "arrow_forward"}
+                      </span>
+                    </button>
+                  )}
+
+                  {approveError && (
+                    <div className="mt-3 p-3 bg-[#ba1a1a]/30 border border-white/20 rounded-lg flex items-start gap-2">
+                      <span className="material-symbols-outlined text-[16px] mt-0.5">error</span>
+                      <p className="text-label-sm">{approveError}</p>
+                    </div>
+                  )}
                 </div>
                 {/*  Abstract glow effect  */}
                 <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#008080] rounded-full blur-[60px] opacity-30 group-hover:opacity-50 transition-opacity"></div>

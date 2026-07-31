@@ -34,7 +34,7 @@ export function computeBlockHash(
  */
 export async function appendLedgerEntry(
   consentId: string,
-  eventType: "GRANT" | "SCOPE_CHANGE" | "REVOKE" | "BANK_ACCESS",
+  eventType: "GRANT" | "SCOPE_CHANGE" | "REVOKE" | "BANK_ACCESS" | "LOAN_OFFER",
   payload: LedgerPayload
 ): Promise<ConsentLedgerEntry> {
   const latestEntry = await dbService.getLatestLedgerEntry(consentId);

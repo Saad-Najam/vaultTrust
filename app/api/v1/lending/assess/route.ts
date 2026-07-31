@@ -164,8 +164,19 @@ export async function GET(request: Request) {
         );
       });
 
+      // Any decision this bank has already recorded, so the UI reflects it
+      // on reload rather than offering to approve twice.
+      const existingOffer = await dbService.getLoanOffer(freelancerId, bankId);
+
       // 6. Data minimization response payload
       const responsePayload: ApplicantDetailResponse = {
+        loanOffer: existingOffer
+          ? {
+              amountPKR: existingOffer.amountPKR,
+              tierLabel: existingOffer.tierLabel,
+              approvedAt: existingOffer.approvedAt,
+            }
+          : null,
         success: true,
         freelancerId,
         name: user?.name || "Freelancer",

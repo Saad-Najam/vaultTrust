@@ -16,9 +16,10 @@ const ACTOR_BY_EVENT: Record<string, string> = {
   SCOPE_CHANGE: "Freelancer",
   REVOKE: "Freelancer",
   BANK_ACCESS: "Bank Officer",
+  LOAN_OFFER: "Bank Officer",
 };
 
-const EVENT_TYPES = ["ALL", "GRANT", "SCOPE_CHANGE", "REVOKE", "BANK_ACCESS"] as const;
+const EVENT_TYPES = ["ALL", "GRANT", "SCOPE_CHANGE", "REVOKE", "BANK_ACCESS", "LOAN_OFFER"] as const;
 type EventTypeFilter = (typeof EVENT_TYPES)[number];
 
 export default function Page() {

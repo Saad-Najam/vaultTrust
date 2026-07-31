@@ -166,6 +166,12 @@ export interface ApplicantDetailResponse {
   };
   eligibility: EligibilityAssessment;
   outflowDisclosure: OutflowDisclosureView;
+  /** Decision this bank has already recorded for the applicant, if any. */
+  loanOffer: {
+    amountPKR: number;
+    tierLabel: string;
+    approvedAt: string;
+  } | null;
   rawTransactions?: TransactionView[];
 }
 

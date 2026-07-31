@@ -89,7 +89,7 @@ export interface Consent {
 export interface ConsentLedgerEntry {
   id: string;
   consentId: string;
-  eventType: "GRANT" | "SCOPE_CHANGE" | "REVOKE" | "BANK_ACCESS";
+  eventType: "GRANT" | "SCOPE_CHANGE" | "REVOKE" | "BANK_ACCESS" | "LOAN_OFFER";
   timestamp: string; // ISO string
   payloadHash: string;
   prevHash: string;
@@ -99,6 +99,28 @@ export interface ConsentLedgerEntry {
    * `payloadHash` is the authoritative digest; this is what it hashes.
    */
   payload?: Record<string, unknown>;
+}
+
+/**
+ * A lending decision recorded by a bank officer. Stored separately from
+ * `Consent` because it is the bank's own action — revoking consent stops
+ * further data access but must not erase the record that an offer was made.
+ */
+export interface LoanOffer {
+  id: string; // freelancerId_bankId
+  consentId: string;
+  freelancerId: string;
+  bankId: string;
+  /** Offer ceiling at approval time, in PKR. */
+  amountPKR: number;
+  /** Eligibility tier the offer was based on. */
+  tier: string;
+  tierLabel: string;
+  /** Snapshot of the score the decision was made against, for auditability. */
+  ivsAtApproval: number;
+  approvedBy: string;
+  approvedAt: string;
+  status: "OFFERED";
 }
 
 export interface IncomeScore {
@@ -372,6 +394,19 @@ export const dbService = {
   async deleteConsent(id: string): Promise<void> {
     const firestore = getAdminFirestore();
     await firestore.collection("consents").doc(id).delete();
+  },
+
+  // --- LOAN OFFERS ---
+  // Firestore: loanOffers/{freelancerId_bankId}
+  async getLoanOffer(freelancerId: string, bankId: string): Promise<LoanOffer | null> {
+    const firestore = getAdminFirestore();
+    const snap = await firestore.collection("loanOffers").doc(`${freelancerId}_${bankId}`).get();
+    return snap.exists ? (snap.data() as LoanOffer) : null;
+  },
+
+  async createLoanOffer(offer: LoanOffer): Promise<void> {
+    const firestore = getAdminFirestore();
+    await firestore.collection("loanOffers").doc(offer.id).set(offer);
   },
 
   // --- LEDGER ---
