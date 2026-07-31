@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { ROLE_HOME } from "@/lib/use_role";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function LoginPage() {
 
       // 3. Redirect based on role claim
       if (role === "BANK_OFFICER") {
-        router.push("/lending");
+        router.push(ROLE_HOME.BANK_OFFICER);
       } else {
         router.push("/connect");
       }

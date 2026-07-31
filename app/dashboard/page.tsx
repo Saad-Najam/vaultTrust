@@ -8,6 +8,7 @@ import UserAvatar from "@/components/UserAvatar";
 import { normalizeAmountToPKR } from "@/lib/scoring";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { useCurrentUser } from "@/lib/use_current_user";
+import { useRole } from "@/lib/use_role";
 import { INCOME_PLATFORMS, PLATFORM_META } from "@/lib/platforms";
 import { toCsvRow, downloadTextFile } from "@/lib/download";
 import NotificationBell from "@/components/NotificationBell";
@@ -812,9 +813,10 @@ function BankInsightsPlaceholder() {
 }
 
 export default function Page() {
-  const { role, loading } = useCurrentUser();
+  // Token claim, not a network fetch — see lib/use_role.ts.
+  const { role, loading } = useRole();
 
-  if (loading) {
+  if (loading || !role) {
     return (
       <div className="flex h-screen items-center justify-center bg-surface">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />

@@ -7,7 +7,7 @@ import UserAvatar from "@/components/UserAvatar";
 import NotificationBell from "@/components/NotificationBell";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { toCsvRow, downloadTextFile } from "@/lib/download";
-import { useCurrentUser } from "@/lib/use_current_user";
+import { useRole } from "@/lib/use_role";
 import type { VerifiedLedgerEntry } from "@/lib/api_types";
 
 /** The ledger stores no actor column; the event type implies who acted. */
@@ -22,11 +22,10 @@ const EVENT_TYPES = ["ALL", "GRANT", "SCOPE_CHANGE", "REVOKE", "BANK_ACCESS"] as
 type EventTypeFilter = (typeof EVENT_TYPES)[number];
 
 export default function Page() {
-  // useCurrentUser() starts as role: null while its fetch is in flight —
-  // without gating on its own loading flag, isBankOfficer reads false for
-  // that first render and the freelancer sidebar flashes before flipping
-  // to the bank one.
-  const { role, loading: roleLoading } = useCurrentUser();
+  // Role comes from the ID token claim, not a /profile/me fetch: a network
+  // failure there would leave role null and silently render the freelancer
+  // portal to a bank officer.
+  const { role, loading: roleLoading } = useRole();
   const isBankOfficer = role === "BANK_OFFICER";
   const [ledger, setLedger] = useState<VerifiedLedgerEntry[]>([]);
   const [applicantNames, setApplicantNames] = useState<Record<string, string>>({});

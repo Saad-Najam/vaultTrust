@@ -7,6 +7,7 @@ import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { formatConsentExpiry } from "@/lib/consent_display";
 import type { Consent, VerificationResponse, VerifiedLedgerEntry } from "@/lib/api_types";
+import RoleGate from "@/components/RoleGate";
 
 // First 6 + last 4 characters, per the standard Explorer-link truncation format.
 function truncateSignature(sig: string | null | undefined): string {
@@ -31,7 +32,7 @@ function daysRemaining(consent: Consent): string {
   return days > 0 ? `${days} days remaining` : "Expired";
 }
 
-export default function Page() {
+function ConsentManagePage() {
   const [activeConsent, setActiveConsent] = useState<Consent | null>(null);
   const [verification, setVerification] = useState<VerificationResponse | null>(null);
   const [revokeError, setRevokeError] = useState<string | null>(null);
@@ -455,5 +456,13 @@ export default function Page() {
       </div>
       </div>
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <RoleGate allow="FREELANCER">
+      <ConsentManagePage />
+    </RoleGate>
   );
 }

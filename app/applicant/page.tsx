@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { doc, onSnapshot } from "firebase/firestore";
 import BankSidebar from "@/components/BankSidebar";
+import RoleGate from "@/components/RoleGate";
 import ExplainabilityCard from "@/components/ExplainabilityCard";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { db } from "@/lib/firebase";
@@ -609,16 +610,18 @@ function ApplicantDetail() {
  */
 export default function Page() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-screen items-center justify-center bg-surface">
-          <div className="animate-pulse text-on-surface-variant text-body-md">
-            Loading applicant…
+    <RoleGate allow="BANK_OFFICER">
+      <Suspense
+        fallback={
+          <div className="flex h-screen items-center justify-center bg-surface">
+            <div className="animate-pulse text-on-surface-variant text-body-md">
+              Loading applicant…
+            </div>
           </div>
-        </div>
-      }
-    >
-      <ApplicantDetail />
-    </Suspense>
+        }
+      >
+        <ApplicantDetail />
+      </Suspense>
+    </RoleGate>
   );
 }

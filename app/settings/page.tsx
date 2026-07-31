@@ -7,6 +7,7 @@ import { waitForAuthInit } from "@/lib/auth_client";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import { useCurrentUser, setCurrentUserProfile } from "@/lib/use_current_user";
 import { getErrorMessage } from "@/lib/errors";
+import RoleGate from "@/components/RoleGate";
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -51,7 +52,7 @@ function resizeImageToDataUrl(file: File, maxDim = 320, quality = 0.85): Promise
   });
 }
 
-export default function Page() {
+function SettingsPage() {
   const [email, setEmail] = useState<string | null>(null);
   const [uid, setUid] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -298,5 +299,13 @@ export default function Page() {
         </div>
       </main>
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <RoleGate allow="FREELANCER">
+      <SettingsPage />
+    </RoleGate>
   );
 }

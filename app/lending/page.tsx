@@ -5,10 +5,11 @@ import Link from "next/link";
 import BankSidebar from "@/components/BankSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import NotificationBell from "@/components/NotificationBell";
+import RoleGate from "@/components/RoleGate";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import type { ApplicantListItem } from "@/lib/api_types";
 
-export default function Page() {
+function LendingPortal() {
   const [applicants, setApplicants] = useState<ApplicantListItem[]>([]);
 
   useEffect(() => {
@@ -373,5 +374,13 @@ export default function Page() {
       </main>
       {/*  Micro-interaction Scripts  */}
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <RoleGate allow="BANK_OFFICER">
+      <LendingPortal />
+    </RoleGate>
   );
 }

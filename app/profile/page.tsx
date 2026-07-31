@@ -5,8 +5,9 @@ import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import { fetchWithAuth } from "@/lib/fetch_client";
 import type { ReliabilityResponse } from "@/lib/api_types";
+import RoleGate from "@/components/RoleGate";
 
-export default function Page() {
+function ProfilePage() {
   const [reliability, setReliability] = useState<ReliabilityResponse | null>(null);
 
   useEffect(() => {
@@ -184,5 +185,13 @@ export default function Page() {
       </button>
       </div>
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <RoleGate allow="FREELANCER">
+      <ProfilePage />
+    </RoleGate>
   );
 }

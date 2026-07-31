@@ -6,8 +6,9 @@ import { fetchWithAuth } from "@/lib/fetch_client";
 import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import { PLATFORMS, INCOME_PLATFORMS, OUTFLOW_PLATFORMS, PLATFORM_META, Platform } from "@/lib/platforms";
+import RoleGate from "@/components/RoleGate";
 
-export default function Page() {
+function ConsentSetupPage() {
   const router = useRouter();
   // Default on for the two the freelancer almost always has; the rest opt-in.
   const [sources, setSources] = useState<Record<Platform, boolean>>(
@@ -436,5 +437,13 @@ export default function Page() {
             </div>
             
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <RoleGate allow="FREELANCER">
+      <ConsentSetupPage />
+    </RoleGate>
   );
 }

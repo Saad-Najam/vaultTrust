@@ -7,6 +7,7 @@ import FreelancerSidebar from "@/components/FreelancerSidebar";
 import UserAvatar from "@/components/UserAvatar";
 import NotificationBell from "@/components/NotificationBell";
 import { fetchWithAuth } from "@/lib/fetch_client";
+import RoleGate from "@/components/RoleGate";
 import {
   INCOME_PLATFORMS,
   PLATFORM_META,
@@ -543,7 +544,7 @@ function CreditCardConnector({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function Page() {
+function ConnectPage() {
   const router = useRouter();
   const [savingDraft, setSavingDraft] = useState(false);
   const [sources, setSources] = useState<ConnectedSource[]>([]);
@@ -1302,5 +1303,13 @@ export default function Page() {
         }
       `}</style>
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <RoleGate allow="FREELANCER">
+      <ConnectPage />
+    </RoleGate>
   );
 }
