@@ -32,7 +32,10 @@ function ApplicantDetail() {
   // Derived from the URL rather than mirrored into state via an effect.
   const freelancerId = useSearchParams().get("freelancerId");
   const [applicant, setApplicant] = useState<ApplicantDetailResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Only start in a loading state when there's actually a fetch to do —
+  // otherwise the missing-freelancerId branch below would need a synchronous
+  // setState-in-effect just to turn it back off.
+  const [loading, setLoading] = useState(!!freelancerId);
   const [error, setError] = useState<string | null>(null);
   const [verification, setVerification] = useState<VerificationResponse | null>(null);
   const [auditTrail, setAuditTrail] = useState<VerifiedLedgerEntry[]>([]);
@@ -109,6 +112,26 @@ function ApplicantDetail() {
   }, [consentId]);
 
   const isLiveRevoked = liveConsent?.status === "REVOKED";
+
+  if (!freelancerId) {
+    return (
+      <div className="max-w-4xl mx-auto py-24 px-gutter flex flex-col items-center text-center ml-72">
+        <div className="w-20 h-20 bg-error-container/20 rounded-full flex items-center justify-center mb-6 text-error">
+          <span className="material-symbols-outlined text-4xl">person_search</span>
+        </div>
+        <h3 className="text-headline-md font-headline-md text-error mb-2">No Applicant Selected</h3>
+        <p className="text-body-md text-on-surface-variant max-w-md mb-8">
+          Choose a profile from the applicant list to view its verification details.
+        </p>
+        <Link href="/lending">
+          <button className="bg-primary text-on-primary px-8 py-4 rounded-xl font-bold flex items-center gap-2 hover:shadow-lg transition-all active:scale-95">
+            <span className="material-symbols-outlined">arrow_back</span>
+            Go to Applicant List
+          </button>
+        </Link>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
